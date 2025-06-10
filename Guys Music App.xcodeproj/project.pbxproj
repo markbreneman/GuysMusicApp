@@ -1,0 +1,691 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		155A4EA52DF22FFE00E3EFFB /* Guys Music App Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 155A4EA42DF22FFE00E3EFFB /* Guys Music App Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		155A59312DF2492200E3EFFB /* Music in Resources */ = {isa = PBXBuildFile; fileRef = 155A59302DF248C200E3EFFB /* Music */; };
+		155A59322DF2492900E3EFFB /* Music in Resources */ = {isa = PBXBuildFile; fileRef = 155A59302DF248C200E3EFFB /* Music */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		155A4EA62DF22FFE00E3EFFB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 155A4E982DF22FFE00E3EFFB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 155A4EA32DF22FFE00E3EFFB;
+			remoteInfo = "Guys Music App Watch App";
+		};
+		155A4EB42DF22FFF00E3EFFB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 155A4E982DF22FFE00E3EFFB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 155A4EA32DF22FFE00E3EFFB;
+			remoteInfo = "Guys Music App Watch App";
+		};
+		155A4EBE2DF22FFF00E3EFFB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 155A4E982DF22FFE00E3EFFB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 155A4EA32DF22FFE00E3EFFB;
+			remoteInfo = "Guys Music App Watch App";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		155A4ECA2DF22FFF00E3EFFB /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				155A4EA52DF22FFE00E3EFFB /* Guys Music App Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		155A4E9E2DF22FFE00E3EFFB /* Guys Music App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Guys Music App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		155A4EA42DF22FFE00E3EFFB /* Guys Music App Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Guys Music App Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		155A4EB32DF22FFF00E3EFFB /* Guys Music App Watch AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Guys Music App Watch AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		155A4EBD2DF22FFF00E3EFFB /* Guys Music App Watch AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Guys Music App Watch AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		155A59302DF248C200E3EFFB /* Music */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Music; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		155A4EA82DF22FFE00E3EFFB /* Guys Music App Watch App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Guys Music App Watch App";
+			sourceTree = "<group>";
+		};
+		155A4EB62DF22FFF00E3EFFB /* Guys Music App Watch AppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Guys Music App Watch AppTests";
+			sourceTree = "<group>";
+		};
+		155A4EC02DF22FFF00E3EFFB /* Guys Music App Watch AppUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Guys Music App Watch AppUITests";
+			sourceTree = "<group>";
+		};
+		155A57642DF244E600E3EFFB /* Music */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Music;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		155A4EA12DF22FFE00E3EFFB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		155A4EB02DF22FFF00E3EFFB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		155A4EBA2DF22FFF00E3EFFB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		155A4E972DF22FFE00E3EFFB = {
+			isa = PBXGroup;
+			children = (
+				155A4EA82DF22FFE00E3EFFB /* Guys Music App Watch App */,
+				155A4EB62DF22FFF00E3EFFB /* Guys Music App Watch AppTests */,
+				155A4EC02DF22FFF00E3EFFB /* Guys Music App Watch AppUITests */,
+				155A4E9F2DF22FFE00E3EFFB /* Products */,
+				155A59302DF248C200E3EFFB /* Music */,
+			);
+			sourceTree = "<group>";
+		};
+		155A4E9F2DF22FFE00E3EFFB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				155A4E9E2DF22FFE00E3EFFB /* Guys Music App.app */,
+				155A57642DF244E600E3EFFB /* Music */,
+				155A4EA42DF22FFE00E3EFFB /* Guys Music App Watch App.app */,
+				155A4EB32DF22FFF00E3EFFB /* Guys Music App Watch AppTests.xctest */,
+				155A4EBD2DF22FFF00E3EFFB /* Guys Music App Watch AppUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		155A4E9D2DF22FFE00E3EFFB /* Guys Music App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 155A4ECB2DF22FFF00E3EFFB /* Build configuration list for PBXNativeTarget "Guys Music App" */;
+			buildPhases = (
+				155A4E9C2DF22FFE00E3EFFB /* Resources */,
+				155A4ECA2DF22FFF00E3EFFB /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				155A4EA72DF22FFE00E3EFFB /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				155A57642DF244E600E3EFFB /* Music */,
+			);
+			name = "Guys Music App";
+			packageProductDependencies = (
+			);
+			productName = "Guys Music App";
+			productReference = 155A4E9E2DF22FFE00E3EFFB /* Guys Music App.app */;
+			productType = "com.apple.product-type.application.watchapp2-container";
+		};
+		155A4EA32DF22FFE00E3EFFB /* Guys Music App Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 155A4EC72DF22FFF00E3EFFB /* Build configuration list for PBXNativeTarget "Guys Music App Watch App" */;
+			buildPhases = (
+				155A4EA02DF22FFE00E3EFFB /* Sources */,
+				155A4EA12DF22FFE00E3EFFB /* Frameworks */,
+				155A4EA22DF22FFE00E3EFFB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				155A4EA82DF22FFE00E3EFFB /* Guys Music App Watch App */,
+				155A57642DF244E600E3EFFB /* Music */,
+			);
+			name = "Guys Music App Watch App";
+			packageProductDependencies = (
+			);
+			productName = "Guys Music App Watch App";
+			productReference = 155A4EA42DF22FFE00E3EFFB /* Guys Music App Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
+		155A4EB22DF22FFF00E3EFFB /* Guys Music App Watch AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 155A4ECE2DF22FFF00E3EFFB /* Build configuration list for PBXNativeTarget "Guys Music App Watch AppTests" */;
+			buildPhases = (
+				155A4EAF2DF22FFF00E3EFFB /* Sources */,
+				155A4EB02DF22FFF00E3EFFB /* Frameworks */,
+				155A4EB12DF22FFF00E3EFFB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				155A4EB52DF22FFF00E3EFFB /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				155A4EB62DF22FFF00E3EFFB /* Guys Music App Watch AppTests */,
+				155A57642DF244E600E3EFFB /* Music */,
+			);
+			name = "Guys Music App Watch AppTests";
+			packageProductDependencies = (
+			);
+			productName = "Guys Music App Watch AppTests";
+			productReference = 155A4EB32DF22FFF00E3EFFB /* Guys Music App Watch AppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		155A4EBC2DF22FFF00E3EFFB /* Guys Music App Watch AppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 155A4ED12DF22FFF00E3EFFB /* Build configuration list for PBXNativeTarget "Guys Music App Watch AppUITests" */;
+			buildPhases = (
+				155A4EB92DF22FFF00E3EFFB /* Sources */,
+				155A4EBA2DF22FFF00E3EFFB /* Frameworks */,
+				155A4EBB2DF22FFF00E3EFFB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				155A4EBF2DF22FFF00E3EFFB /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				155A4EC02DF22FFF00E3EFFB /* Guys Music App Watch AppUITests */,
+				155A57642DF244E600E3EFFB /* Music */,
+			);
+			name = "Guys Music App Watch AppUITests";
+			packageProductDependencies = (
+			);
+			productName = "Guys Music App Watch AppUITests";
+			productReference = 155A4EBD2DF22FFF00E3EFFB /* Guys Music App Watch AppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		155A4E982DF22FFE00E3EFFB /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					155A4E9D2DF22FFE00E3EFFB = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					155A4EA32DF22FFE00E3EFFB = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					155A4EB22DF22FFF00E3EFFB = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 155A4EA32DF22FFE00E3EFFB;
+					};
+					155A4EBC2DF22FFF00E3EFFB = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 155A4EA32DF22FFE00E3EFFB;
+					};
+				};
+			};
+			buildConfigurationList = 155A4E9B2DF22FFE00E3EFFB /* Build configuration list for PBXProject "Guys Music App" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 155A4E972DF22FFE00E3EFFB;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 155A4E9F2DF22FFE00E3EFFB /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				155A4E9D2DF22FFE00E3EFFB /* Guys Music App */,
+				155A4EA32DF22FFE00E3EFFB /* Guys Music App Watch App */,
+				155A4EB22DF22FFF00E3EFFB /* Guys Music App Watch AppTests */,
+				155A4EBC2DF22FFF00E3EFFB /* Guys Music App Watch AppUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		155A4E9C2DF22FFE00E3EFFB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				155A59322DF2492900E3EFFB /* Music in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		155A4EA22DF22FFE00E3EFFB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				155A59312DF2492200E3EFFB /* Music in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		155A4EB12DF22FFF00E3EFFB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		155A4EBB2DF22FFF00E3EFFB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		155A4EA02DF22FFE00E3EFFB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		155A4EAF2DF22FFF00E3EFFB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		155A4EB92DF22FFF00E3EFFB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		155A4EA72DF22FFE00E3EFFB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 155A4EA32DF22FFE00E3EFFB /* Guys Music App Watch App */;
+			targetProxy = 155A4EA62DF22FFE00E3EFFB /* PBXContainerItemProxy */;
+		};
+		155A4EB52DF22FFF00E3EFFB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 155A4EA32DF22FFE00E3EFFB /* Guys Music App Watch App */;
+			targetProxy = 155A4EB42DF22FFF00E3EFFB /* PBXContainerItemProxy */;
+		};
+		155A4EBF2DF22FFF00E3EFFB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 155A4EA32DF22FFE00E3EFFB /* Guys Music App Watch App */;
+			targetProxy = 155A4EBE2DF22FFF00E3EFFB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		155A4EC52DF22FFF00E3EFFB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 536Y2995D7;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		155A4EC62DF22FFF00E3EFFB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 536Y2995D7;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		155A4EC82DF22FFF00E3EFFB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 536Y2995D7;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Guys-Music-App-Watch-App-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Guys Music App";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKWatchOnly = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "markbreneman.Guys-Music-App.watchkitapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Debug;
+		};
+		155A4EC92DF22FFF00E3EFFB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 536Y2995D7;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Guys-Music-App-Watch-App-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Guys Music App";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKWatchOnly = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "markbreneman.Guys-Music-App.watchkitapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Release;
+		};
+		155A4ECC2DF22FFF00E3EFFB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 536Y2995D7;
+				INFOPLIST_KEY_CFBundleDisplayName = "Guys Music App";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "markbreneman.Guys-Music-App";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		155A4ECD2DF22FFF00E3EFFB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 536Y2995D7;
+				INFOPLIST_KEY_CFBundleDisplayName = "Guys Music App";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "markbreneman.Guys-Music-App";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		155A4ECF2DF22FFF00E3EFFB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 536Y2995D7;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "markbreneman.Guys-Music-App-Watch-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Guys Music App Watch App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Guys Music App Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Debug;
+		};
+		155A4ED02DF22FFF00E3EFFB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 536Y2995D7;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "markbreneman.Guys-Music-App-Watch-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Guys Music App Watch App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Guys Music App Watch App";
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Release;
+		};
+		155A4ED22DF22FFF00E3EFFB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 536Y2995D7;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "markbreneman.Guys-Music-App-Watch-AppUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_TARGET_NAME = "Guys Music App Watch App";
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Debug;
+		};
+		155A4ED32DF22FFF00E3EFFB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 536Y2995D7;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "markbreneman.Guys-Music-App-Watch-AppUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_TARGET_NAME = "Guys Music App Watch App";
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 11.5;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		155A4E9B2DF22FFE00E3EFFB /* Build configuration list for PBXProject "Guys Music App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				155A4EC52DF22FFF00E3EFFB /* Debug */,
+				155A4EC62DF22FFF00E3EFFB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		155A4EC72DF22FFF00E3EFFB /* Build configuration list for PBXNativeTarget "Guys Music App Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				155A4EC82DF22FFF00E3EFFB /* Debug */,
+				155A4EC92DF22FFF00E3EFFB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		155A4ECB2DF22FFF00E3EFFB /* Build configuration list for PBXNativeTarget "Guys Music App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				155A4ECC2DF22FFF00E3EFFB /* Debug */,
+				155A4ECD2DF22FFF00E3EFFB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		155A4ECE2DF22FFF00E3EFFB /* Build configuration list for PBXNativeTarget "Guys Music App Watch AppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				155A4ECF2DF22FFF00E3EFFB /* Debug */,
+				155A4ED02DF22FFF00E3EFFB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		155A4ED12DF22FFF00E3EFFB /* Build configuration list for PBXNativeTarget "Guys Music App Watch AppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				155A4ED22DF22FFF00E3EFFB /* Debug */,
+				155A4ED32DF22FFF00E3EFFB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 155A4E982DF22FFE00E3EFFB /* Project object */;
+}
