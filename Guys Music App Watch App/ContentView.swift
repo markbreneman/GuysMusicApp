@@ -1,16 +1,40 @@
 import SwiftUI
 import AVFoundation
 import MediaPlayer
-// REMOVED: import CoreImage is no longer needed.
-import CoreGraphics // ADDED: For low-level image processing.
+import CoreGraphics
 
-// MARK: - Navigation State
+// MARK: - Navigation
+// ADDED: Enum to define the types of views we can navigate to.
+enum NavigationDestination: Hashable {
+    case artist(Artist)
+    case album(Album)
+}
+
 enum Tab {
     case player, library, playlists
 }
 
 class ViewRouter: ObservableObject {
     @Published var currentTab: Tab = .library
+    
+    // UPDATED: Use a navigation path for modern navigation
+    @Published var libraryPath = [NavigationDestination]()
+
+    // UPDATED: Helper to trigger the navigation flow
+    func navigateTo(artist: Artist, album: Album?) {
+        // Switch to the library tab first
+        self.currentTab = .library
+
+        // Then, on the next run loop, set the path. This ensures the
+        // view has time to switch tabs before the navigation is triggered.
+        DispatchQueue.main.async {
+            self.libraryPath.removeAll()
+            self.libraryPath.append(.artist(artist))
+            if let album = album {
+                self.libraryPath.append(.album(album))
+            }
+        }
+    }
 }
 
 // MARK: - Data Models
@@ -24,7 +48,6 @@ struct Song: Identifiable, Hashable, Codable {
 
     var path: URL {
         // Reconstruct the full URL when needed
-        // This assumes the "Music" directory is in the bundle's resource path
         return Bundle.main.resourceURL!.appendingPathComponent(relativePath)
     }
 
@@ -96,12 +119,9 @@ class PlaylistManager: ObservableObject {
 }
 
 // MARK: - String Extension
-// ADDED: An extension to clean up song titles by removing track numbers.
 extension String {
     /// Removes leading track numbers (e.g., "01. ", "02 - ") from a string using regular expressions.
     func removingTrackNumber() -> String {
-        // This pattern looks for one or more digits at the start of the string,
-        // followed by optional whitespace and a separator (like '.', '-', or just space).
         let pattern = "^\\d+\\s*([.-]|\\s-)?\\s*"
         return self.replacingOccurrences(of: pattern, with: "", options: .regularExpression, range: nil)
     }
@@ -141,7 +161,6 @@ class MusicLibraryManager: ObservableObject {
                 
                 // Expecting structure: .../Music/Artist/Album/Song.mp3
                 if pathComponents.count >= 4 {
-                    // UPDATED: The song title is now cleaned to remove any track number prefixes.
                     let songTitle = url.deletingPathExtension().lastPathComponent.removingTrackNumber()
                     let albumName = url.deletingLastPathComponent().lastPathComponent
                     let artistName = url.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent
@@ -191,6 +210,10 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private var audioPlayer: AVAudioPlayer?
     private var playlist: [Song] = []
     private var currentSongIndex = 0
+    
+    // ADDED: Timers to manage inactivity and app termination.
+    private var foregroundPauseTimer: Timer?
+    private var backgroundPauseTimer: Timer?
 
     override init() {
         super.init()
@@ -313,15 +336,19 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         }
     }
     
+    // UPDATED: Starts playback and invalidates any inactivity timers.
     private func play() {
         audioPlayer?.play()
         isPlaying = true
+        invalidateTimers() // When music is playing, we don't need to quit.
         updateNowPlayingInfo()
     }
     
+    // UPDATED: Pauses playback and starts the foreground inactivity timer.
     private func pause() {
         audioPlayer?.pause()
         isPlaying = false
+        startForegroundPauseTimer() // Start timer when paused.
         updateNowPlayingInfo()
     }
 
@@ -346,6 +373,68 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
             nextTrack()
         }
     }
+    
+    // MARK: - ADDED: Inactivity and App Lifecycle Management
+    
+    /// Handles changes in the app's scene phase (e.g., moving to background).
+    /// - Parameter newPhase: The new `ScenePhase` provided by SwiftUI.
+    func handleScenePhaseChange(newPhase: ScenePhase) {
+        // This logic should only run if music is paused and a song is loaded.
+        guard !isPlaying, currentSong != nil else { return }
+
+        switch newPhase {
+        case .background:
+            // App has been backgrounded while paused. Invalidate the foreground
+            // timer and start the shorter (1 minute) background timer.
+            invalidateTimers()
+            startBackgroundPauseTimer()
+        case .active:
+            // App has returned to the foreground while paused. Invalidate the
+            // background timer and restart the standard (2 minute) foreground timer.
+            invalidateTimers()
+            startForegroundPauseTimer()
+        default:
+            // We don't need to handle .inactive for this feature.
+            break
+        }
+    }
+
+    /// Stops any running inactivity timers.
+    private func invalidateTimers() {
+        foregroundPauseTimer?.invalidate()
+        foregroundPauseTimer = nil
+        backgroundPauseTimer?.invalidate()
+        backgroundPauseTimer = nil
+    }
+
+    /// Starts a 2-minute timer. If it fires, the app will close.
+    /// This is used when the app is paused in the foreground.
+    private func startForegroundPauseTimer() {
+        invalidateTimers()
+        guard currentSong != nil else { return }
+        foregroundPauseTimer = Timer.scheduledTimer(withTimeInterval: 120.0, repeats: false) { [weak self] _ in
+            print("Foreground pause limit (2 minutes) reached. Exiting.")
+            self?.stopAndExit()
+        }
+    }
+
+    /// Starts a 1-minute timer. If it fires, the app will close.
+    /// This is used when the app is paused in the background.
+    private func startBackgroundPauseTimer() {
+        invalidateTimers()
+        guard currentSong != nil else { return }
+        backgroundPauseTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: false) { [weak self] _ in
+            print("Background pause limit (1 minute) reached. Exiting.")
+            self?.stopAndExit()
+        }
+    }
+    
+    /// A helper function to safely stop the audio player and exit the application.
+    private func stopAndExit() {
+        audioPlayer?.stop()
+        isPlaying = false
+        exit(0)
+    }
 }
 
 // MARK: - Main Content View
@@ -354,13 +443,17 @@ struct ContentView: View {
     @StateObject private var libraryManager = MusicLibraryManager()
     @StateObject private var playlistManager = PlaylistManager()
     @StateObject private var viewRouter = ViewRouter()
+    
+    // ADDED: Environment property to detect scene phase changes (e.g., backgrounding).
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         TabView(selection: $viewRouter.currentTab) {
             PlayerView()
                 .tabItem {
                     VStack {
-                        Image(systemName: "play.circle.fill")
+                        // UPDATED: Icon changed to a circle.
+                        Image(systemName: "circle.fill")
                             .font(.subheadline)
                         Text("Player")
                             .font(.caption2)
@@ -371,7 +464,8 @@ struct ContentView: View {
             LibraryView()
                  .tabItem {
                     VStack {
-                        Image(systemName: "music.note.list")
+                        // UPDATED: Icon changed to a circle.
+                        Image(systemName: "circle.fill")
                             .font(.subheadline)
                         Text("Library")
                             .font(.caption2)
@@ -382,7 +476,8 @@ struct ContentView: View {
             PlaylistsView()
                 .tabItem {
                     VStack {
-                        Image(systemName: "music.note")
+                        // UPDATED: Icon changed to a circle.
+                        Image(systemName: "circle.fill")
                             .font(.subheadline)
                         Text("Playlists")
                             .font(.caption2)
@@ -394,35 +489,50 @@ struct ContentView: View {
         .environmentObject(libraryManager)
         .environmentObject(playlistManager)
         .environmentObject(viewRouter)
+        // ADDED: A modifier to watch for scene phase changes and notify the music player.
+        .onChange(of: scenePhase) { oldValue, newPhase in
+            musicPlayer.handleScenePhaseChange(newPhase: newPhase)
+        }
     }
 }
 
 // MARK: - Library View
+// UPDATED: Replaced NavigationView and deprecated NavigationLinks with NavigationStack.
 struct LibraryView: View {
     @EnvironmentObject var libraryManager: MusicLibraryManager
+    @EnvironmentObject var viewRouter: ViewRouter
 
     var body: some View {
-        NavigationView {
+        NavigationStack(path: $viewRouter.libraryPath) {
             List {
                 ForEach(libraryManager.artists) { artist in
-                    NavigationLink(destination: ArtistDetailView(artist: artist)) {
+                    NavigationLink(value: NavigationDestination.artist(artist)) {
                         Text(artist.name)
                     }
                 }
             }
             .navigationTitle("Library")
+            .navigationDestination(for: NavigationDestination.self) { destination in
+                switch destination {
+                case .artist(let artist):
+                    ArtistDetailView(artist: artist)
+                case .album(let album):
+                    AlbumDetailView(album: album)
+                }
+            }
         }
     }
 }
 
 // MARK: - Artist and Album Detail Views
+// UPDATED: Replaced deprecated NavigationLinks with value-based links.
 struct ArtistDetailView: View {
     let artist: Artist
     
     var body: some View {
         List {
             ForEach(artist.albums) { album in
-                NavigationLink(destination: AlbumDetailView(album: album)) {
+                NavigationLink(value: NavigationDestination.album(album)) {
                     Text(album.name)
                 }
             }
@@ -439,6 +549,20 @@ struct AlbumDetailView: View {
 
     var body: some View {
         List {
+            VStack {
+                ArtworkView(song: album.songs.first, size: 70)
+                Text(album.name)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 4)
+                Text(album.songs.first?.artist ?? "")
+                     .font(.subheadline)
+                     .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .listRowBackground(Color.clear)
+
             ForEach(album.songs) { song in
                 Text(song.title)
                     .contentShape(Rectangle())
@@ -454,21 +578,21 @@ struct AlbumDetailView: View {
                     }
             }
         }
-        .navigationTitle(album.name)
         .sheet(item: $songToAddToPlaylist) { song in
-            AddToPlaylistView(song: song)
+            PlayerAddToPlaylistView(song: song) { _ in }
         }
     }
 }
 
 // MARK: - Playlist Views
+// UPDATED: Replaced NavigationView with NavigationStack.
 struct PlaylistsView: View {
     @EnvironmentObject var playlistManager: PlaylistManager
     @State private var isShowingCreateSheet = false
     @State private var newPlaylistName = ""
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             List {
                 ForEach(playlistManager.playlists) { playlist in
                     NavigationLink(destination: PlaylistDetailView(playlist: playlist)) {
@@ -488,16 +612,13 @@ struct PlaylistsView: View {
                 }
             }
             .sheet(isPresented: $isShowingCreateSheet) {
-                VStack {
-                    Text("New Playlist").font(.headline).padding()
-                    TextField("Playlist Name", text: $newPlaylistName)
-                        .padding()
-                    HStack {
-                        Button("Cancel") {
-                            isShowingCreateSheet = false
-                            newPlaylistName = ""
-                        }
+                NavigationView {
+                    VStack {
+                        TextField("Playlist Name", text: $newPlaylistName)
+                            .padding()
+                        
                         Spacer()
+                        
                         Button("Create") {
                             if !newPlaylistName.isEmpty {
                                 playlistManager.createPlaylist(name: newPlaylistName)
@@ -505,8 +626,22 @@ struct PlaylistsView: View {
                                 isShowingCreateSheet = false
                             }
                         }
+                        .buttonStyle(.borderedProminent)
+                        .frame(maxWidth: .infinity)
+                        .disabled(newPlaylistName.isEmpty)
+                        .padding()
                     }
-                    .padding()
+                    .navigationTitle("New Playlist")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button(action: {
+                                isShowingCreateSheet = false
+                                newPlaylistName = ""
+                            }) {
+                                Image(systemName: "xmark")
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -539,38 +674,10 @@ struct PlaylistDetailView: View {
     }
 }
 
-struct AddToPlaylistView: View {
-    @Environment(\.presentationMode) var presentationMode
-    @EnvironmentObject var playlistManager: PlaylistManager
-    let song: Song
-
-    var body: some View {
-        NavigationView {
-            List {
-                ForEach(playlistManager.playlists) { playlist in
-                    Button(action: {
-                        playlistManager.addSong(song, to: playlist.id)
-                        presentationMode.wrappedValue.dismiss()
-                    }) {
-                        Text(playlist.name)
-                    }
-                }
-            }
-            .navigationTitle("Add to Playlist")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Artwork View
 struct ArtworkView: View {
     let song: Song?
+    let size: CGFloat
     @State private var artworkData: Data?
     
     var body: some View {
@@ -581,11 +688,11 @@ struct ArtworkView: View {
                     .aspectRatio(contentMode: .fit)
             } else {
                 Image(systemName: "music.note")
-                    .font(.system(size: 50))
+                    .font(.system(size: size / 1.6))
                     .foregroundColor(.gray.opacity(0.5))
             }
         }
-        .frame(width: 80, height: 80)
+        .frame(width: size, height: size)
         .background(Color.white.opacity(0.1))
         .cornerRadius(8)
         .shadow(radius: 5)
@@ -672,12 +779,12 @@ extension UIImage {
         guard let cgImage = self.cgImage,
               let colorSpace = cgImage.colorSpace,
               let context = CGContext(data: nil,
-                                    width: Int(thumbnailSize.width),
-                                    height: Int(thumbnailSize.height),
-                                    bitsPerComponent: 8,
-                                    bytesPerRow: 0,
-                                    space: colorSpace,
-                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+                                      width: Int(thumbnailSize.width),
+                                      height: Int(thumbnailSize.height),
+                                      bitsPerComponent: 8,
+                                      bytesPerRow: 0,
+                                      space: colorSpace,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         else {
             // Fallback if context creation fails.
             return [.black, .gray.opacity(0.5)]
@@ -712,12 +819,128 @@ extension UIImage {
     }
 }
 
+// ADDED: A view for creating a new playlist and adding the song in one flow.
+struct PlayerCreateAndAddView: View {
+    @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject var playlistManager: PlaylistManager
+    let song: Song
+    let onCreated: (String) -> Void // Callback with the name of the new playlist
+    
+    @State private var newPlaylistName = ""
+
+    var body: some View {
+        NavigationView {
+            VStack {
+                Text("Create a new playlist for '\(song.title)'.")
+                    .multilineTextAlignment(.center)
+                    .padding()
+                
+                TextField("Playlist Name", text: $newPlaylistName)
+                    .padding()
+                
+                Spacer()
+                
+                // UPDATED: The explicit "Cancel" button is removed to rely on the system 'X' button.
+                Button("Create & Add") {
+                    if !newPlaylistName.isEmpty {
+                        // 1. Create the empty playlist
+                        playlistManager.createPlaylist(name: newPlaylistName)
+                        
+                        // 2. Find the new playlist's ID (the last one added)
+                        if let newPlaylist = playlistManager.playlists.last {
+                            // 3. Add the current song to it
+                            playlistManager.addSong(song, to: newPlaylist.id)
+                            
+                            // 4. Dismiss this sheet and call the completion handler
+                            presentationMode.wrappedValue.dismiss()
+                            onCreated(newPlaylist.name)
+                        }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .frame(maxWidth: .infinity)
+                .disabled(newPlaylistName.isEmpty)
+                .padding()
+            }
+            .navigationTitle("New Playlist")
+        }
+    }
+}
+
+
+// UPDATED: This view now includes an option to create a new playlist.
+struct PlayerAddToPlaylistView: View {
+    @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject var playlistManager: PlaylistManager
+    let song: Song
+    let onAdded: (String) -> Void // Callback with playlist name
+
+    @State private var isCreatingNewPlaylist = false
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section(header: Text("Existing Playlists")) {
+                    // Show message if no playlists exist
+                    if playlistManager.playlists.isEmpty {
+                        Text("No playlists found.")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(playlistManager.playlists) { playlist in
+                            Button(action: {
+                                playlistManager.addSong(song, to: playlist.id)
+                                presentationMode.wrappedValue.dismiss()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                    onAdded(playlist.name)
+                                }
+                            }) {
+                                Text(playlist.name)
+                            }
+                        }
+                    }
+                }
+                
+                Section {
+                    Button("Create New Playlist") {
+                        isCreatingNewPlaylist = true
+                    }
+                }
+            }
+            .navigationTitle("Add to Playlist")
+            // REMOVED: The explicit "Cancel" button in the toolbar is no longer needed.
+            // The system provides a standard dismiss ('X') button for sheets.
+            .sheet(isPresented: $isCreatingNewPlaylist) {
+                PlayerCreateAndAddView(song: song) { newPlaylistName in
+                    // This callback is triggered from the create view.
+                    // Dismiss the current (add to playlist) view.
+                    presentationMode.wrappedValue.dismiss()
+                    
+                    // And then call the original onAdded callback to show the toast.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                         onAdded(newPlaylistName)
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 // MARK: - Player View
 struct PlayerView: View {
     @EnvironmentObject var musicPlayer: MusicPlayerManager
-    @State private var volume: Double = 0.5
+    // ADDED: Environment objects for navigation.
+    @EnvironmentObject var libraryManager: MusicLibraryManager
+    @EnvironmentObject var viewRouter: ViewRouter
+    
+    // UPDATED: This state variable now tracks the raw crown input.
+    @State private var crownRotation: Double = 0.5
     @State private var backgroundColors: [Color] = [.black, .gray.opacity(0.5)]
+    
+    // UPDATED: State for managing the sheet presentation and success message
+    @State private var songForPlaylistAction: Song?
+    @State private var showOptionsMenu = false
+    @State private var toastMessage: String?
 
     var body: some View {
         ZStack {
@@ -726,7 +949,8 @@ struct PlayerView: View {
                 .ignoresSafeArea()
 
             VStack {
-                ArtworkView(song: musicPlayer.currentSong)
+                // UPDATED: The 'size' parameter is now passed to the ArtworkView.
+                ArtworkView(song: musicPlayer.currentSong, size: 80)
                 
                 if let song = musicPlayer.currentSong {
                     Text(song.title)
@@ -776,21 +1000,89 @@ struct PlayerView: View {
                 .padding(.bottom)
             }
             .padding(.vertical)
+            
+            // ADDED: Toast message view for success notifications
+            if toastMessage != nil {
+                VStack {
+                    Spacer()
+                    Text(toastMessage!)
+                        .padding()
+                        .background(.thinMaterial)
+                        .foregroundColor(.primary)
+                        .cornerRadius(10)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                        withAnimation {
+                            toastMessage = nil
+                        }
+                    }
+                }
+                .zIndex(1)
+            }
         }
         .focusable()
-        .digitalCrownRotation($volume, from: 0.0, through: 1.0, by: 0.05, sensitivity: .low, isContinuous: false, isHapticFeedbackEnabled: true)
+        // UPDATED: The crown now binds to an intermediate state variable.
+        .digitalCrownRotation($crownRotation, from: 0.0, through: 1.0, by: 0.05, sensitivity: .low, isContinuous: false, isHapticFeedbackEnabled: true)
         .onAppear {
-            volume = Double(musicPlayer.volume)
+            // Initialize the crown's position based on the inverted volume.
+            crownRotation = 1.0 - Double(musicPlayer.volume)
         }
-        // UPDATED: The 'onChange' modifier now uses the modern two-parameter
-        // closure '(oldValue, newValue)' to resolve the deprecation warning.
-        .onChange(of: volume) { oldValue, newValue in
-            musicPlayer.setVolume(Float(newValue))
+        // UPDATED: This observer now calculates the inverted volume before setting it.
+        .onChange(of: crownRotation) { oldValue, newValue in
+            let newVolume = 1.0 - newValue
+            musicPlayer.setVolume(Float(newVolume))
+        }
+        // ADDED: An extra observer to keep the crown position in sync.
+        .onChange(of: musicPlayer.volume) { _, newVolume in
+            crownRotation = 1.0 - Double(newVolume)
         }
         .task(id: musicPlayer.currentSong?.id) {
             await updateBackgroundColor()
         }
         .navigationTitle("Now Playing")
+        // UPDATED: Overflow menu button now shows the menu.
+        .overlay(alignment: .topTrailing) {
+            if musicPlayer.currentSong != nil {
+                Button(action: { showOptionsMenu = true }) {
+                    Image(systemName: "ellipsis")
+                        .font(.body)
+                }
+                .frame(width: 30, height: 30)
+                .background(Color.white.opacity(0.15))
+                .clipShape(Circle())
+                .padding(.trailing)
+            }
+        }
+        // UPDATED: The confirmation dialog now includes navigation options.
+        .confirmationDialog("Actions", isPresented: $showOptionsMenu, titleVisibility: .hidden) {
+            Button("Add to Playlist") {
+                songForPlaylistAction = musicPlayer.currentSong
+            }
+            
+            // ADDED: Conditional "Go to" buttons for album and artist.
+            if let song = musicPlayer.currentSong, let artist = libraryManager.artists.first(where: { $0.name == song.artist }) {
+                if let album = artist.albums.first(where: { $0.name == song.album }) {
+                    Button("Go to Album") {
+                        // UPDATED: Call the new navigation method
+                        viewRouter.navigateTo(artist: artist, album: album)
+                    }
+                }
+                Button("Go to Artist") {
+                    // UPDATED: Call the new navigation method
+                    viewRouter.navigateTo(artist: artist, album: nil)
+                }
+            }
+        }
+        // UPDATED: The sheet is now triggered by an identifiable item for better reliability.
+        .sheet(item: $songForPlaylistAction) { song in
+            PlayerAddToPlaylistView(song: song) { playlistName in
+                withAnimation {
+                    toastMessage = "Added to \"\(playlistName)\""
+                }
+            }
+        }
     }
 
     private func updateBackgroundColor() async {
