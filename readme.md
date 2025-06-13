@@ -1,4 +1,4 @@
-***Standalone Apple Watch Music App***
+**Standalone Apple Watch Music App**
 
 ![alt text](/Overview.gif "Overview screenrecording")
 
