@@ -587,7 +587,6 @@ struct LibraryView: View {
 }
 
 // MARK: - Artist and Album Detail Views
-// UPDATED: Added a custom header with a play button.
 struct ArtistDetailView: View {
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var musicPlayer: MusicPlayerManager
@@ -649,7 +648,6 @@ struct ArtistDetailView: View {
     }
 }
 
-// UPDATED: Added a custom header and play button.
 struct AlbumDetailView: View {
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var musicPlayer: MusicPlayerManager
@@ -686,24 +684,24 @@ struct AlbumDetailView: View {
             }
             .padding(.horizontal)
             .padding(.bottom, 4)
-
-            // MARK: Title and Artwork
-            VStack {
-                ArtworkView(song: album.songs.first, size: 70)
-                    .padding(.bottom, 4)
-                Text(album.name)
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .multilineTextAlignment(.center)
-                Text(album.songs.first?.artist ?? "")
-                     .font(.subheadline)
-                     .foregroundColor(.secondary)
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
             
-            // MARK: Song List
             List {
+                // Header within the list
+                VStack {
+                    ArtworkView(song: album.songs.first, size: 70)
+                        .padding(.bottom, 4)
+                    Text(album.name)
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .multilineTextAlignment(.center)
+                    Text(album.songs.first?.artist ?? "")
+                         .font(.subheadline)
+                         .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .listRowBackground(Color.clear)
+                
+                // Song list
                 ForEach(album.songs) { song in
                     Text(song.title)
                         .contentShape(Rectangle())
