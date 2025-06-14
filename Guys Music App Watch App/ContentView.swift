@@ -101,6 +101,18 @@ class PlaylistManager: ObservableObject {
         }
     }
     
+    // ADDED: Removes a specific song from a given playlist.
+    func removeSong(_ song: Song, from playlistID: UUID) {
+        guard let playlistIndex = playlists.firstIndex(where: { $0.id == playlistID }) else { return }
+        playlists[playlistIndex].songs.removeAll { $0.id == song.id }
+    }
+
+    // ADDED: Removes songs from a playlist using an IndexSet, for the swipe-to-delete feature.
+    func removeSongs(at offsets: IndexSet, from playlistID: UUID) {
+        guard let playlistIndex = playlists.firstIndex(where: { $0.id == playlistID }) else { return }
+        playlists[playlistIndex].songs.remove(atOffsets: offsets)
+    }
+    
     private func savePlaylists() {
         if let encoded = try? JSONEncoder().encode(playlists) {
             UserDefaults.standard.set(encoded, forKey: playlistsKey)
@@ -200,12 +212,18 @@ class MusicLibraryManager: ObservableObject {
     }
 }
 
+// ADDED: Enum for playback repeat modes.
+enum RepeatMode {
+    case none, one, all
+}
 
 // MARK: - Music Player Manager
 class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
     @Published var isPlaying = false
     @Published var currentSong: Song?
     @Published var volume: Float = 0.5
+    // ADDED: The current repeat mode for playback.
+    @Published var repeatMode: RepeatMode = .none
 
     private var audioPlayer: AVAudioPlayer?
     private var playlist: [Song] = []
@@ -352,25 +370,69 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         updateNowPlayingInfo()
     }
 
+    // UPDATED: Logic to handle repeat modes and playlist boundaries.
     func nextTrack() {
         guard !playlist.isEmpty else { return }
+        let wasPlaying = self.isPlaying
+
+        // If we're on the last track AND not repeating all, just stay there.
+        if currentSongIndex == playlist.count - 1 && repeatMode != .all {
+            return
+        }
+
         currentSongIndex = (currentSongIndex + 1) % playlist.count
         currentSong = playlist[currentSongIndex]
         loadAudio()
-        if isPlaying { play() }
+        if wasPlaying { play() }
     }
 
+    // UPDATED: Logic to handle repeat modes and playlist boundaries.
     func previousTrack() {
         guard !playlist.isEmpty else { return }
+        let wasPlaying = self.isPlaying
+
+        // A common UX is to restart the song if it's more than a few seconds in.
+        if let player = audioPlayer, player.currentTime > 3 {
+            player.currentTime = 0
+            if wasPlaying { play() } // ensure it keeps playing
+            return
+        }
+
+        // If we're on the first track AND not repeating all, just stay there.
+        if currentSongIndex == 0 && repeatMode != .all {
+            audioPlayer?.currentTime = 0
+            return
+        }
+        
         currentSongIndex = (currentSongIndex - 1 + playlist.count) % playlist.count
         currentSong = playlist[currentSongIndex]
         loadAudio()
-        if isPlaying { play() }
+        if wasPlaying { play() }
     }
     
+    // UPDATED: Handles auto-advancing to the next track based on the repeat mode.
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        if flag {
+        if !flag { return }
+
+        if repeatMode == .one {
+            player.currentTime = 0
+            player.play()
+        } else if currentSongIndex == playlist.count - 1 && repeatMode == .none {
+            // Reached end of playlist and not repeating.
+            player.currentTime = 0
+            pause() // Stop and trigger inactivity timers
+        } else {
+            // This covers "repeat all" and "none" (when not at the end).
             nextTrack()
+        }
+    }
+    
+    // ADDED: A method to set the repeat mode. Toggles off if the same mode is set again.
+    func setRepeatMode(to newMode: RepeatMode) {
+        if repeatMode == newMode {
+            repeatMode = .none
+        } else {
+            repeatMode = newMode
         }
     }
     
@@ -525,59 +587,144 @@ struct LibraryView: View {
 }
 
 // MARK: - Artist and Album Detail Views
-// UPDATED: Replaced deprecated NavigationLinks with value-based links.
+// UPDATED: Added a custom header with a play button.
 struct ArtistDetailView: View {
+    @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject var musicPlayer: MusicPlayerManager
+    @EnvironmentObject var viewRouter: ViewRouter
     let artist: Artist
     
     var body: some View {
-        List {
-            ForEach(artist.albums) { album in
-                NavigationLink(value: NavigationDestination.album(album)) {
-                    Text(album.name)
+        VStack(spacing: 0) {
+            // MARK: Custom Header
+            HStack {
+                Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                    Image(systemName: "chevron.left")
+                        .font(.body.weight(.semibold))
+                }
+                .frame(width: 30, height: 30)
+                .background(Color.white.opacity(0.15))
+                .clipShape(Circle())
+                
+                Spacer()
+
+                Button(action: {
+                    let allSongs = artist.albums.flatMap { $0.songs }
+                    if !allSongs.isEmpty {
+                        musicPlayer.setPlaylist(songs: allSongs, startAt: 0)
+                        viewRouter.currentTab = .player
+                    }
+                }) {
+                    Image(systemName: "play.fill")
+                        .font(.body.weight(.semibold))
+                }
+                .frame(width: 30, height: 30)
+                .background(Color.white.opacity(0.15))
+                .clipShape(Circle())
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 4)
+
+            // MARK: Title
+            Text(artist.name)
+                .font(.title3.bold())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+
+            // MARK: Album List
+            List {
+                ForEach(artist.albums) { album in
+                    NavigationLink(value: NavigationDestination.album(album)) {
+                        Text(album.name)
+                    }
                 }
             }
+            .listStyle(.plain)
         }
-        .navigationTitle(artist.name)
+        .padding(.top, 6)
+        .ignoresSafeArea(edges: .top)
+        .navigationBarHidden(true)
+        .navigationBarBackButtonHidden(true)
     }
 }
 
+// UPDATED: Added a custom header and play button.
 struct AlbumDetailView: View {
+    @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var musicPlayer: MusicPlayerManager
     @EnvironmentObject var viewRouter: ViewRouter
     @State private var songToAddToPlaylist: Song?
     let album: Album
 
     var body: some View {
-        List {
+        VStack(spacing: 0) {
+            // MARK: Custom Header
+            HStack {
+                Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                    Image(systemName: "chevron.left")
+                        .font(.body.weight(.semibold))
+                }
+                .frame(width: 30, height: 30)
+                .background(Color.white.opacity(0.15))
+                .clipShape(Circle())
+                
+                Spacer()
+
+                Button(action: {
+                    if !album.songs.isEmpty {
+                        musicPlayer.setPlaylist(songs: album.songs, startAt: 0)
+                        viewRouter.currentTab = .player
+                    }
+                }) {
+                    Image(systemName: "play.fill")
+                        .font(.body.weight(.semibold))
+                }
+                .frame(width: 30, height: 30)
+                .background(Color.white.opacity(0.15))
+                .clipShape(Circle())
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 4)
+
+            // MARK: Title and Artwork
             VStack {
                 ArtworkView(song: album.songs.first, size: 70)
+                    .padding(.bottom, 4)
                 Text(album.name)
                     .font(.headline)
                     .fontWeight(.bold)
                     .multilineTextAlignment(.center)
-                    .padding(.top, 4)
                 Text(album.songs.first?.artist ?? "")
                      .font(.subheadline)
                      .foregroundColor(.secondary)
             }
-            .frame(maxWidth: .infinity)
-            .listRowBackground(Color.clear)
-
-            ForEach(album.songs) { song in
-                Text(song.title)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        print("Tapped on song: \(song.title)")
-                        if let index = album.songs.firstIndex(of: song) {
-                            musicPlayer.setPlaylist(songs: album.songs, startAt: index)
-                            viewRouter.currentTab = .player
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+            
+            // MARK: Song List
+            List {
+                ForEach(album.songs) { song in
+                    Text(song.title)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            print("Tapped on song: \(song.title)")
+                            if let index = album.songs.firstIndex(of: song) {
+                                musicPlayer.setPlaylist(songs: album.songs, startAt: index)
+                                viewRouter.currentTab = .player
+                            }
                         }
-                    }
-                    .onLongPressGesture {
-                        self.songToAddToPlaylist = song
-                    }
+                        .onLongPressGesture {
+                            self.songToAddToPlaylist = song
+                        }
+                }
             }
+            .listStyle(.plain)
         }
+        .padding(.top, 6)
+        .ignoresSafeArea(edges: .top)
+        .navigationBarHidden(true)
+        .navigationBarBackButtonHidden(true)
         .sheet(item: $songToAddToPlaylist) { song in
             PlayerAddToPlaylistView(song: song) { _ in }
         }
@@ -595,7 +742,8 @@ struct PlaylistsView: View {
         NavigationStack {
             List {
                 ForEach(playlistManager.playlists) { playlist in
-                    NavigationLink(destination: PlaylistDetailView(playlist: playlist)) {
+                    // UPDATED: Pass the playlist ID to ensure the detail view can update.
+                    NavigationLink(destination: PlaylistDetailView(playlistID: playlist.id)) {
                         Text(playlist.name)
                     }
                 }
@@ -648,29 +796,166 @@ struct PlaylistsView: View {
     }
 }
 
+// UPDATED: The overflow menu is now a plus button that directly triggers the add song flow.
 struct PlaylistDetailView: View {
+    @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var musicPlayer: MusicPlayerManager
     @EnvironmentObject var viewRouter: ViewRouter
-    let playlist: Playlist
+    @EnvironmentObject var playlistManager: PlaylistManager
+    
+    let playlistID: UUID
+    @State private var isAddingSongs = false
+
+    private var playlist: Playlist? {
+        playlistManager.playlists.first { $0.id == playlistID }
+    }
     
     var body: some View {
-        List {
-            ForEach(playlist.songs) { song in
-                 VStack(alignment: .leading) {
-                    Text(song.title).font(.subheadline)
-                    Text(song.artist).font(.footnote).foregroundColor(.secondary)
-                 }
-                 .contentShape(Rectangle())
-                 .onTapGesture {
-                    print("Tapped on song: \(song.title)")
-                    if let index = playlist.songs.firstIndex(of: song) {
-                        musicPlayer.setPlaylist(songs: playlist.songs, startAt: index)
-                        viewRouter.currentTab = .player
+        if let playlist = playlist {
+            VStack(spacing: 0) {
+                // MARK: Custom Header
+                HStack {
+                    Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                        Image(systemName: "chevron.left")
+                            .font(.body.weight(.semibold))
+                    }
+                    .frame(width: 30, height: 30)
+                    .background(Color.white.opacity(0.15))
+                    .clipShape(Circle())
+                    
+                    Spacer()
+
+                    Button(action: { isAddingSongs = true }) {
+                        Image(systemName: "plus")
+                            .font(.body.weight(.semibold))
+                    }
+                    .frame(width: 30, height: 30)
+                    .background(Color.white.opacity(0.15))
+                    .clipShape(Circle())
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 4)
+                
+                // MARK: Title
+                Text(playlist.name)
+                    .font(.title3.bold())
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                
+                // MARK: Song List
+                ZStack {
+                    List {
+                        ForEach(playlist.songs) { song in
+                             VStack(alignment: .leading) {
+                                Text(song.title).font(.subheadline)
+                                Text(song.artist).font(.footnote).foregroundColor(.secondary)
+                             }
+                             .contentShape(Rectangle())
+                             .onTapGesture {
+                                print("Tapped on song: \(song.title)")
+                                if let index = playlist.songs.firstIndex(of: song) {
+                                    musicPlayer.setPlaylist(songs: playlist.songs, startAt: index)
+                                    viewRouter.currentTab = .player
+                                }
+                            }
+                        }
+                        .onDelete { indexSet in
+                            playlistManager.removeSongs(at: indexSet, from: playlist.id)
+                        }
+                    }
+                    .listStyle(.plain)
+
+                    if playlist.songs.isEmpty {
+                        VStack {
+                            Text("This Playlist is Empty")
+                                .font(.headline)
+                            Text("Tap the '+' button to add songs.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        }
+                    }
+                }
+            }
+            .padding(.top, 6)
+            .ignoresSafeArea(edges: .top)
+            .navigationBarHidden(true)
+            .navigationBarBackButtonHidden(true)
+            .sheet(isPresented: $isAddingSongs) {
+                PlaylistAddSongView(playlist: playlist)
+            }
+        } else {
+            Text("Playlist not found")
+                .foregroundColor(.secondary)
+        }
+    }
+}
+
+
+// ADDED: A view to browse the library and add a song to a specific playlist.
+struct PlaylistAddSongView: View {
+    @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject var libraryManager: MusicLibraryManager
+    @EnvironmentObject var playlistManager: PlaylistManager
+    
+    // The playlist we are currently adding songs to.
+    let playlist: Playlist
+
+    var body: some View {
+        NavigationView {
+            List {
+                // Iterate through all artists in the library.
+                ForEach(libraryManager.artists) { artist in
+                    Section(header: Text(artist.name)) {
+                        // For each artist, iterate through their albums.
+                        ForEach(artist.albums) { album in
+                            // For each album, iterate through its songs.
+                            ForEach(album.songs) { song in
+                                // UPDATED: Button action now toggles adding/removing the song.
+                                Button(action: {
+                                    let isSongInPlaylist = playlistManager.playlists
+                                        .first { $0.id == playlist.id }?
+                                        .songs.contains { $0.id == song.id } == true
+                                    
+                                    if isSongInPlaylist {
+                                        playlistManager.removeSong(song, from: playlist.id)
+                                    } else {
+                                        playlistManager.addSong(song, to: playlist.id)
+                                    }
+                                }) {
+                                    HStack {
+                                        VStack(alignment: .leading) {
+                                            Text(song.title)
+                                            Text(album.name)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Spacer()
+                                        // Show a checkmark if the song is already in the playlist.
+                                        if playlistManager.playlists.first(where: { $0.id == playlist.id })?.songs.contains(where: { $0.id == song.id }) == true {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.accentColor)
+                                        }
+                                    }
+                                }
+                                .foregroundColor(.primary) // Ensure the button text is always tappable.
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Add to \(playlist.name)")
+            .toolbar {
+                // A "Done" button to dismiss the sheet.
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        presentationMode.wrappedValue.dismiss()
                     }
                 }
             }
         }
-        .navigationTitle(playlist.name)
     }
 }
 
@@ -1055,25 +1340,32 @@ struct PlayerView: View {
                 .padding(.trailing)
             }
         }
-        // UPDATED: The confirmation dialog now includes navigation options.
+        // UPDATED: The confirmation dialog now includes the new repeat options and respects your ordering.
         .confirmationDialog("Actions", isPresented: $showOptionsMenu, titleVisibility: .hidden) {
             Button("Add to Playlist") {
                 songForPlaylistAction = musicPlayer.currentSong
             }
             
-            // ADDED: Conditional "Go to" buttons for album and artist.
             if let song = musicPlayer.currentSong, let artist = libraryManager.artists.first(where: { $0.name == song.artist }) {
                 if let album = artist.albums.first(where: { $0.name == song.album }) {
                     Button("Go to Album") {
-                        // UPDATED: Call the new navigation method
                         viewRouter.navigateTo(artist: artist, album: album)
                     }
                 }
                 Button("Go to Artist") {
-                    // UPDATED: Call the new navigation method
                     viewRouter.navigateTo(artist: artist, album: nil)
                 }
             }
+            
+            Button(musicPlayer.repeatMode == .all ? "Repeat Album ✓" : "Repeat Album") {
+                musicPlayer.setRepeatMode(to: .all)
+            }
+            
+            Button(musicPlayer.repeatMode == .one ? "Repeat Song ✓" : "Repeat Song") {
+                musicPlayer.setRepeatMode(to: .one)
+            }
+            
+            Button("Cancel", role: .cancel) { }
         }
         // UPDATED: The sheet is now triggered by an identifiable item for better reliability.
         .sheet(item: $songForPlaylistAction) { song in
