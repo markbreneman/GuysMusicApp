@@ -222,8 +222,9 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
     @Published var isPlaying = false
     @Published var currentSong: Song?
     @Published var volume: Float = 0.5
-    // ADDED: The current repeat mode for playback.
     @Published var repeatMode: RepeatMode = .none
+    // ADDED: Publishes the playback progress for the UI.
+    @Published var playbackProgress: Double = 0.0
 
     private var audioPlayer: AVAudioPlayer?
     private var playlist: [Song] = []
@@ -232,6 +233,8 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
     // ADDED: Timers to manage inactivity and app termination.
     private var foregroundPauseTimer: Timer?
     private var backgroundPauseTimer: Timer?
+    // ADDED: Timer to update the playback progress.
+    private var progressUpdateTimer: Timer?
 
     override init() {
         super.init()
@@ -335,6 +338,10 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private func loadAudio() {
         guard let song = currentSong else { return }
         
+        // Stop any existing progress timer and reset progress.
+        stopProgressTimer()
+        playbackProgress = 0.0
+        
         do {
             audioPlayer = try AVAudioPlayer(contentsOf: song.path)
             audioPlayer?.delegate = self
@@ -354,31 +361,28 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         }
     }
     
-    // UPDATED: Starts playback and invalidates any inactivity timers.
+    // UPDATED: Starts playback and the progress timer.
     private func play() {
         audioPlayer?.play()
         isPlaying = true
-        invalidateTimers() // When music is playing, we don't need to quit.
+        invalidateTimers()
+        startProgressTimer() // Start updating progress
         updateNowPlayingInfo()
     }
     
-    // UPDATED: Pauses playback and starts the foreground inactivity timer.
+    // UPDATED: Pauses playback and the progress timer.
     private func pause() {
         audioPlayer?.pause()
         isPlaying = false
-        startForegroundPauseTimer() // Start timer when paused.
+        startForegroundPauseTimer()
+        stopProgressTimer() // Stop updating progress
         updateNowPlayingInfo()
     }
 
-    // UPDATED: Logic to handle repeat modes and playlist boundaries.
+    // UPDATED: Logic now loops regardless of repeat mode for manual track changes.
     func nextTrack() {
         guard !playlist.isEmpty else { return }
         let wasPlaying = self.isPlaying
-
-        // If we're on the last track AND not repeating all, just stay there.
-        if currentSongIndex == playlist.count - 1 && repeatMode != .all {
-            return
-        }
 
         currentSongIndex = (currentSongIndex + 1) % playlist.count
         currentSong = playlist[currentSongIndex]
@@ -386,21 +390,14 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         if wasPlaying { play() }
     }
 
-    // UPDATED: Logic to handle repeat modes and playlist boundaries.
+    // UPDATED: Logic now loops regardless of repeat mode for manual track changes.
     func previousTrack() {
         guard !playlist.isEmpty else { return }
         let wasPlaying = self.isPlaying
 
-        // A common UX is to restart the song if it's more than a few seconds in.
         if let player = audioPlayer, player.currentTime > 3 {
             player.currentTime = 0
-            if wasPlaying { play() } // ensure it keeps playing
-            return
-        }
-
-        // If we're on the first track AND not repeating all, just stay there.
-        if currentSongIndex == 0 && repeatMode != .all {
-            audioPlayer?.currentTime = 0
+            if wasPlaying { play() }
             return
         }
         
@@ -418,16 +415,14 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
             player.currentTime = 0
             player.play()
         } else if currentSongIndex == playlist.count - 1 && repeatMode == .none {
-            // Reached end of playlist and not repeating.
+            playbackProgress = 0
             player.currentTime = 0
-            pause() // Stop and trigger inactivity timers
+            pause()
         } else {
-            // This covers "repeat all" and "none" (when not at the end).
             nextTrack()
         }
     }
     
-    // ADDED: A method to set the repeat mode. Toggles off if the same mode is set again.
     func setRepeatMode(to newMode: RepeatMode) {
         if repeatMode == newMode {
             repeatMode = .none
@@ -436,32 +431,39 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         }
     }
     
-    // MARK: - ADDED: Inactivity and App Lifecycle Management
+    // MARK: - Progress Timer
+    // ADDED: Starts a timer to periodically update the playback progress.
+    private func startProgressTimer() {
+        stopProgressTimer() // Ensure no other timer is running.
+        progressUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self = self, let player = self.audioPlayer, player.duration > 0 else { return }
+            self.playbackProgress = player.currentTime / player.duration
+        }
+    }
+
+    // ADDED: Stops the progress update timer.
+    private func stopProgressTimer() {
+        progressUpdateTimer?.invalidate()
+        progressUpdateTimer = nil
+    }
     
-    /// Handles changes in the app's scene phase (e.g., moving to background).
-    /// - Parameter newPhase: The new `ScenePhase` provided by SwiftUI.
+    // MARK: - Inactivity and App Lifecycle Management
+    
     func handleScenePhaseChange(newPhase: ScenePhase) {
-        // This logic should only run if music is paused and a song is loaded.
         guard !isPlaying, currentSong != nil else { return }
 
         switch newPhase {
         case .background:
-            // App has been backgrounded while paused. Invalidate the foreground
-            // timer and start the shorter (1 minute) background timer.
             invalidateTimers()
             startBackgroundPauseTimer()
         case .active:
-            // App has returned to the foreground while paused. Invalidate the
-            // background timer and restart the standard (2 minute) foreground timer.
             invalidateTimers()
             startForegroundPauseTimer()
         default:
-            // We don't need to handle .inactive for this feature.
             break
         }
     }
 
-    /// Stops any running inactivity timers.
     private func invalidateTimers() {
         foregroundPauseTimer?.invalidate()
         foregroundPauseTimer = nil
@@ -469,8 +471,6 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         backgroundPauseTimer = nil
     }
 
-    /// Starts a 2-minute timer. If it fires, the app will close.
-    /// This is used when the app is paused in the foreground.
     private func startForegroundPauseTimer() {
         invalidateTimers()
         guard currentSong != nil else { return }
@@ -480,8 +480,6 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         }
     }
 
-    /// Starts a 1-minute timer. If it fires, the app will close.
-    /// This is used when the app is paused in the background.
     private func startBackgroundPauseTimer() {
         invalidateTimers()
         guard currentSong != nil else { return }
@@ -491,8 +489,8 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         }
     }
     
-    /// A helper function to safely stop the audio player and exit the application.
     private func stopAndExit() {
+        stopProgressTimer() // Stop all timers before exiting.
         audioPlayer?.stop()
         isPlaying = false
         exit(0)
@@ -513,37 +511,26 @@ struct ContentView: View {
         TabView(selection: $viewRouter.currentTab) {
             PlayerView()
                 .tabItem {
-                    VStack {
-                        // UPDATED: Icon changed to a circle.
-                        Image(systemName: "circle.fill")
-                            .font(.subheadline)
-                        Text("Player")
-                            .font(.caption2)
-                    }
+                    // *** CHANGED ICON HERE ***
+                    Image(systemName: "circle")
+                    Text(musicPlayer.currentSong?.title ?? "Player")
+                        .lineLimit(1)
                 }
                 .tag(Tab.player)
             
             LibraryView()
                  .tabItem {
-                    VStack {
-                        // UPDATED: Icon changed to a circle.
-                        Image(systemName: "circle.fill")
-                            .font(.subheadline)
-                        Text("Library")
-                            .font(.caption2)
-                    }
+                    // *** CHANGED ICON HERE ***
+                    Image(systemName: "circle")
+                    Text("Library")
                  }
                  .tag(Tab.library)
 
             PlaylistsView()
                 .tabItem {
-                    VStack {
-                        // UPDATED: Icon changed to a circle.
-                        Image(systemName: "circle.fill")
-                            .font(.subheadline)
-                        Text("Playlists")
-                            .font(.caption2)
-                    }
+                    // *** CHANGED ICON HERE ***
+                    Image(systemName: "circle")
+                    Text("Playlists")
                 }
                 .tag(Tab.playlists)
         }
@@ -551,7 +538,6 @@ struct ContentView: View {
         .environmentObject(libraryManager)
         .environmentObject(playlistManager)
         .environmentObject(viewRouter)
-        // ADDED: A modifier to watch for scene phase changes and notify the music player.
         .onChange(of: scenePhase) { oldValue, newPhase in
             musicPlayer.handleScenePhaseChange(newPhase: newPhase)
         }
@@ -846,8 +832,8 @@ struct PlaylistDetailView: View {
                     List {
                         ForEach(playlist.songs) { song in
                              VStack(alignment: .leading) {
-                                Text(song.title).font(.subheadline)
-                                Text(song.artist).font(.footnote).foregroundColor(.secondary)
+                                 Text(song.title).font(.subheadline)
+                                 Text(song.artist).font(.footnote).foregroundColor(.secondary)
                              }
                              .contentShape(Rectangle())
                              .onTapGesture {
@@ -1248,12 +1234,12 @@ struct PlayerView: View {
                         .padding(.horizontal)
                 } else {
                     Text("No Song Selected").font(.subheadline).padding(.top, 10)
-                    Text("Select a song from your library").font(.footnote).foregroundColor(.gray)
+                    Text("Start in your library").font(.footnote).foregroundColor(.gray)
                 }
 
                 Spacer()
 
-                HStack(spacing: 20) {
+                HStack(spacing: 15) {
                     Button(action: { musicPlayer.previousTrack() }) {
                         Image(systemName: "backward.fill").font(.title3)
                     }
@@ -1262,15 +1248,27 @@ struct PlayerView: View {
                     .clipShape(Circle())
                     .disabled(musicPlayer.currentSong == nil)
 
-                    Button(action: { musicPlayer.playPause() }) {
-                        Image(systemName: musicPlayer.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 26))
-                            .padding(.leading, musicPlayer.isPlaying ? 0 : 2)
+                    // UPDATED: Play button now has a circular progress bar.
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white.opacity(0.3), lineWidth: 4)
+
+                        Circle()
+                            .trim(from: 0.0, to: musicPlayer.playbackProgress)
+                            .stroke(Color.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                        
+                        Button(action: { musicPlayer.playPause() }) {
+                            Image(systemName: musicPlayer.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 26))
+                                .padding(.leading, musicPlayer.isPlaying ? 0 : 2)
+                        }
+                        .frame(width: 40, height: 40)
+                        .background(Color.white.opacity(0.15))
+                        .clipShape(Circle())
+                        .disabled(musicPlayer.currentSong == nil)
                     }
-                    .frame(width: 40, height: 40)
-                    .background(Color.white.opacity(0.15))
-                    .clipShape(Circle())
-                    .disabled(musicPlayer.currentSong == nil)
+                    .frame(width: 52, height: 52)
 
                     Button(action: { musicPlayer.nextTrack() }) {
                         Image(systemName: "forward.fill").font(.title3)
@@ -1355,7 +1353,7 @@ struct PlayerView: View {
                 }
             }
             
-            Button(musicPlayer.repeatMode == .all ? "Repeat Album ✓" : "Repeat Album") {
+            Button(musicPlayer.repeatMode == .all ? "Repeat All ✓" : "Repeat All") {
                 musicPlayer.setRepeatMode(to: .all)
             }
             
