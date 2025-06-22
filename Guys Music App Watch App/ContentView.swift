@@ -84,6 +84,9 @@ class ExtensionDelegate: NSObject, WKApplicationDelegate, ObservableObject, URLS
             try fileManager.moveItem(at: location, to: destinationPath)
             print("Successfully moved downloaded file to: \(destinationPath.path)")
             
+            // Post a notification that the UI can observe to update the download count.
+            NotificationCenter.default.post(name: .downloadProgressCompletedOneFile, object: nil)
+            
         } catch {
             print("Error moving downloaded file: \(error)")
         }
@@ -94,6 +97,8 @@ class ExtensionDelegate: NSObject, WKApplicationDelegate, ObservableObject, URLS
         DispatchQueue.main.async {
             self.backgroundTaskCompletionHandler?()
             self.backgroundTaskCompletionHandler = nil
+            // Post a notification that the UI can observe to know that all downloads are complete.
+            NotificationCenter.default.post(name: .allDownloadsFinished, object: nil)
         }
     }
     
@@ -111,8 +116,8 @@ class ExtensionDelegate: NSObject, WKApplicationDelegate, ObservableObject, URLS
 
 // MARK: - Navigation
 enum NavigationDestination: Hashable {
-    case artist(Artist)
-    case album(Album)
+    case artist(id: UUID)
+    case album(id: UUID)
 }
 
 enum Tab {
@@ -123,13 +128,13 @@ class ViewRouter: ObservableObject {
     @Published var currentTab: Tab = .library
     @Published var libraryPath = [NavigationDestination]()
 
-    func navigateTo(artist: Artist, album: Album?) {
+    func navigateTo(artistId: UUID, albumId: UUID?) {
         self.currentTab = .library
         DispatchQueue.main.async {
             self.libraryPath.removeAll()
-            self.libraryPath.append(.artist(artist))
-            if let album = album {
-                self.libraryPath.append(.album(album))
+            self.libraryPath.append(.artist(id: artistId))
+            if let albumId = albumId {
+                self.libraryPath.append(.album(id: albumId))
             }
         }
     }
@@ -146,7 +151,6 @@ struct Song: Identifiable, Hashable, Codable {
     var path: URL {
         do {
             let documentsURL = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
-            // appendingPathComponent correctly handles subdirectories from the relativePath string.
             return documentsURL.appendingPathComponent(relativePath)
         } catch {
             print("Could not find documents directory: \(error)")
@@ -199,6 +203,11 @@ enum NetworkError: Error, LocalizedError {
 // MARK: - Repeat Mode Enum
 enum RepeatMode {
     case none, one, all
+}
+
+extension Notification.Name {
+    static let downloadProgressCompletedOneFile = Notification.Name("downloadProgressCompletedOneFile")
+    static let allDownloadsFinished = Notification.Name("allDownloadsFinished")
 }
 
 
@@ -268,8 +277,16 @@ class MusicLibraryManager: NSObject, ObservableObject {
     @Published var isLoading = false
     @Published var loadingMessage = ""
     @Published var downloadError: String?
+    
+    // These properties will now be correctly restored on app launch.
+    @Published var isDownloading = false
+    @Published var totalDownloadCount = 0
+    @Published var completedDownloadCount = 0
 
     private let libraryStorageKey = "musicLibrary"
+    // NEW: Keys for persisting download state across app launches.
+    private let downloadInProgressKey = "downloadInProgress"
+    private let totalDownloadCountKey = "totalDownloadCountForCurrentSession"
     
     private struct AlbumEntry: Decodable {
         let name: String
@@ -279,7 +296,58 @@ class MusicLibraryManager: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        // The order is important: load library data first, then check for an
+        // ongoing download state, and finally set up observers for new events.
         loadLibraryFromStorage()
+        restoreDownloadState()
+        setupNotificationObservers()
+    }
+
+    private func setupNotificationObservers() {
+        NotificationCenter.default.addObserver(self, selector: #selector(handleDownloadCompletion), name: .downloadProgressCompletedOneFile, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(handleAllDownloadsFinished), name: .allDownloadsFinished, object: nil)
+    }
+    
+    // NEW: This method checks UserDefaults on app start to see if a download
+    // was in progress. If so, it restores the UI state.
+    private func restoreDownloadState() {
+        if UserDefaults.standard.bool(forKey: downloadInProgressKey) {
+            DispatchQueue.main.async {
+                self.isDownloading = true
+                self.totalDownloadCount = UserDefaults.standard.integer(forKey: self.totalDownloadCountKey)
+                // We recalculate completed files by checking the disk. This is the most reliable way
+                // to know the true progress after an app relaunch.
+                self.completedDownloadCount = self.countDownloadedFiles()
+                print("Restored download state. Progress: \(self.completedDownloadCount) / \(self.totalDownloadCount)")
+            }
+        }
+    }
+
+    // NEW: A helper function to count how many song files actually exist on disk.
+    private func countDownloadedFiles() -> Int {
+        let allSongs = self.artists.flatMap { $0.albums.flatMap { $0.songs } }
+        let fileManager = FileManager.default
+        return allSongs.filter { fileManager.fileExists(atPath: $0.path.path) }.count
+    }
+
+    @objc private func handleDownloadCompletion() {
+        DispatchQueue.main.async {
+            self.completedDownloadCount += 1
+        }
+    }
+
+    @objc private func handleAllDownloadsFinished() {
+        DispatchQueue.main.async {
+            self.isDownloading = false
+            self.totalDownloadCount = 0
+            self.completedDownloadCount = 0
+            
+            // UPDATED: Clear the persisted download state from UserDefaults.
+            UserDefaults.standard.set(false, forKey: self.downloadInProgressKey)
+            UserDefaults.standard.removeObject(forKey: self.totalDownloadCountKey)
+            
+            print("All downloads finished. Cleaned up download state.")
+        }
     }
 
     func loadLibraryFromStorage() {
@@ -328,25 +396,144 @@ class MusicLibraryManager: NSObject, ObservableObject {
             print("Removed library metadata from UserDefaults.")
             deleteAllLocalFiles()
             
+            // UPDATED: Also clear any pending download state when the library is deleted.
+            self.isDownloading = false
+            self.totalDownloadCount = 0
+            self.completedDownloadCount = 0
+            UserDefaults.standard.set(false, forKey: downloadInProgressKey)
+            UserDefaults.standard.removeObject(forKey: totalDownloadCountKey)
+            print("Cleared any active download session state.")
+            
             isLoading = false
             loadingMessage = ""
         }
     }
+    
+    // MARK: - Deletion Logic
+    @MainActor
+    func deleteArtist(withId artistId: UUID) {
+        if let index = artists.firstIndex(where: { $0.id == artistId }) {
+            let artistToDelete = artists[index]
+            let songsToDelete = artistToDelete.albums.flatMap { $0.songs }
+            
+            deleteFiles(for: songsToDelete)
+            
+            artists.remove(at: index)
+            saveLibraryToStorage(artists: artists)
+            print("Deleted artist: \(artistToDelete.name)")
+        }
+    }
+
+    @MainActor
+    func deleteAlbum(withId albumId: UUID) {
+        guard let (artistIndex, albumIndex) = findAlbumIndices(albumId: albumId) else {
+            print("Could not find album with ID \(albumId) to delete.")
+            return
+        }
+        
+        let albumToDelete = artists[artistIndex].albums[albumIndex]
+        deleteFiles(for: albumToDelete.songs)
+        
+        artists[artistIndex].albums.remove(at: albumIndex)
+        
+        if artists[artistIndex].albums.isEmpty {
+            artists.remove(at: artistIndex)
+        }
+        
+        saveLibraryToStorage(artists: artists)
+        print("Deleted album: \(albumToDelete.name)")
+    }
+
+    @MainActor
+    func deleteSong(withId songId: UUID) {
+        guard let (artistIndex, albumIndex, songIndex) = findSongIndices(songId: songId) else {
+            print("Could not find song with ID \(songId) to delete.")
+            return
+        }
+        
+        let songToDelete = artists[artistIndex].albums[albumIndex].songs[songIndex]
+        deleteFiles(for: [songToDelete])
+        
+        artists[artistIndex].albums[albumIndex].songs.remove(at: songIndex)
+
+        if artists[artistIndex].albums[albumIndex].songs.isEmpty {
+            artists[artistIndex].albums.remove(at: albumIndex)
+            
+            if artists[artistIndex].albums.isEmpty {
+                artists.remove(at: artistIndex)
+            }
+        }
+        
+        saveLibraryToStorage(artists: artists)
+        print("Deleted song: \(songToDelete.title)")
+    }
+
+    private func deleteFiles(for songs: [Song]) {
+        let fileManager = FileManager.default
+        for song in songs {
+            let filePath = song.path
+            if fileManager.fileExists(atPath: filePath.path) {
+                do {
+                    try fileManager.removeItem(at: filePath)
+                } catch {
+                    print("Error deleting file \(filePath.path): \(error)")
+                }
+            }
+        }
+    }
+
+    // MARK: - Finders
+    private func findAlbumIndices(albumId: UUID) -> (artist: Int, album: Int)? {
+        for (artistIndex, artist) in artists.enumerated() {
+            if let albumIndex = artist.albums.firstIndex(where: { $0.id == albumId }) {
+                return (artistIndex, albumIndex)
+            }
+        }
+        return nil
+    }
+
+    private func findSongIndices(songId: UUID) -> (artist: Int, album: Int, song: Int)? {
+        for (artistIndex, artist) in artists.enumerated() {
+            for (albumIndex, album) in artist.albums.enumerated() {
+                if let songIndex = album.songs.firstIndex(where: { $0.id == songId }) {
+                    return (artistIndex, albumIndex, songIndex)
+                }
+            }
+        }
+        return nil
+    }
+    
+    func findArtistAndAlbumIds(for song: Song) -> (artistId: UUID, albumId: UUID)? {
+        for artist in artists {
+            for album in artist.albums {
+                if album.songs.contains(where: { $0.id == song.id }) {
+                    return (artist.id, album.id)
+                }
+            }
+        }
+        return nil
+    }
 
     // MARK: - Download Logic
     @MainActor
-    func startBackgroundDownload(from ipAddress: String, delegate: ExtensionDelegate) {
+    func startBackgroundDownload(from ipAddress: String, delegate: ExtensionDelegate, completion: @escaping () -> Void) {
         isLoading = true
         downloadError = nil
         loadingMessage = "Clearing old library..."
         
-        self.artists = []
-        saveLibraryToStorage(artists: [])
-        deleteAllLocalFiles()
-        print("Cleared old library and deleted local files.")
+        // UPDATED: Initiate download tracking state.
+        self.isDownloading = true
+        self.completedDownloadCount = 0
+        self.totalDownloadCount = 0 // Will be set after fetching index.
+        UserDefaults.standard.set(true, forKey: downloadInProgressKey)
         
         Task {
             do {
+                self.artists = []
+                saveLibraryToStorage(artists: [])
+                deleteAllLocalFiles()
+                print("Cleared old library and deleted local files.")
+                
                 loadingMessage = "Fetching library index..."
                 print("Step 1: Fetching index.json from http://\(ipAddress)/index.json")
 
@@ -370,7 +557,10 @@ class MusicLibraryManager: NSObject, ObservableObject {
                 var finalArtists = [Artist]()
                 var artistDict = [String: [Album]]()
                 for entry in albumEntries {
-                    let newAlbum = Album(name: entry.name, songs: entry.songs)
+                    let modifiedSongs = entry.songs.map { song -> Song in
+                        return Song(id: song.id, title: song.title.removingTrackNumber(), artist: song.artist, album: song.album, relativePath: song.relativePath)
+                    }
+                    let newAlbum = Album(name: entry.name, songs: modifiedSongs)
                     artistDict[entry.artist, default: []].append(newAlbum)
                 }
                 finalArtists = artistDict.map { artistName, albums in
@@ -383,7 +573,11 @@ class MusicLibraryManager: NSObject, ObservableObject {
                 print("Step 4: Using passed-in app delegate.")
                 let session = delegate.backgroundURLSession
 
+                // UPDATED: Set and persist the total download count.
                 let allSongs = finalArtists.flatMap({ $0.albums.flatMap({ $0.songs }) })
+                self.totalDownloadCount = allSongs.count
+                UserDefaults.standard.set(self.totalDownloadCount, forKey: self.totalDownloadCountKey)
+                
                 print("Step 5: Starting background downloads for \(allSongs.count) songs.")
                 for song in allSongs {
                     guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: true) else {
@@ -404,16 +598,20 @@ class MusicLibraryManager: NSObject, ObservableObject {
                 }
 
                 print("Step 6: All download tasks created successfully.")
-                loadingMessage = "Downloads started in background. You can leave the app."
-                DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-                    self.isLoading = false
-                }
+                self.isLoading = false
+                completion()
 
             } catch {
+                // UPDATED: If download setup fails, we must reset the download state.
                 let errorMessage = "Error: \(error.localizedDescription)"
                 print("ERROR in startBackgroundDownload: \(errorMessage)")
                 self.isLoading = false
+                self.isDownloading = false
                 self.downloadError = errorMessage
+                
+                // Also reset the persisted state to prevent incorrect UI on next launch.
+                UserDefaults.standard.set(false, forKey: self.downloadInProgressKey)
+                UserDefaults.standard.removeObject(forKey: self.totalDownloadCountKey)
             }
         }
     }
@@ -446,6 +644,7 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
             try AVAudioSession.sharedInstance().setActive(true)
+            print("Audio session configured and activated.")
         } catch {
             print("Failed to set up audio session: \(error.localizedDescription)")
         }
@@ -517,6 +716,7 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     func setPlaylist(songs: [Song], startAt index: Int, andPlay: Bool = true) {
         guard !songs.isEmpty, index < songs.count else { return }
+        setupAudioSession()
         self.playlist = songs
         self.currentSongIndex = index
         self.currentSong = playlist[currentSongIndex]
@@ -647,7 +847,7 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         invalidateTimers()
         guard currentSong != nil else { return }
         foregroundPauseTimer = Timer.scheduledTimer(withTimeInterval: 120.0, repeats: false) { [weak self] _ in
-            self?.stopAndExit()
+            self?.stopPlaybackAndCleanup()
         }
     }
 
@@ -655,15 +855,31 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         invalidateTimers()
         guard currentSong != nil else { return }
         backgroundPauseTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: false) { [weak self] _ in
-            self?.stopAndExit()
+            self?.stopPlaybackAndCleanup()
         }
     }
     
-    private func stopAndExit() {
-        stopProgressTimer()
+    private func stopPlaybackAndCleanup() {
+        print("Cleaning up player resources due to inactivity.")
         audioPlayer?.stop()
         isPlaying = false
-        exit(0)
+
+        // Stop any running timers
+        stopProgressTimer()
+        invalidateTimers()
+
+        // Clear the current playback state to reset the UI
+        playbackProgress = 0.0
+        currentSong = nil
+        playlist.removeAll()
+
+        // Deactivate the audio session to allow other apps to use it.
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            print("Audio session deactivated.")
+        } catch {
+            print("Failed to deactivate audio session: \(error.localizedDescription)")
+        }
     }
 }
 
@@ -706,12 +922,12 @@ struct ContentView: View {
 struct AddMusicView: View {
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var libraryManager: MusicLibraryManager
-    @EnvironmentObject var delegate: ExtensionDelegate // Get the delegate from the environment
+    @EnvironmentObject var delegate: ExtensionDelegate
     
-    @State private var ipAddress = "192.168.86.250:8000" // Hardcoded for debugging
+    @State private var ipAddress = "192.168.86.250:8000"
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 10) {
             if libraryManager.isLoading {
                 ProgressView()
                 Text(libraryManager.loadingMessage)
@@ -721,6 +937,7 @@ struct AddMusicView: View {
             } else {
                 Text("Enter IP Address")
                     .font(.headline)
+                    .padding(.top)
                 
                 TextField("ex.192.168.1.10:8000", text: $ipAddress)
                     .textContentType(.URL)
@@ -735,9 +952,9 @@ struct AddMusicView: View {
                 
                 Button("Fetch Music") {
                     libraryManager.downloadError = nil
-                    // Use the delegate that was passed into the environment directly.
-                    // This is much safer and avoids the race condition.
-                    libraryManager.startBackgroundDownload(from: ipAddress, delegate: delegate)
+                    libraryManager.startBackgroundDownload(from: ipAddress, delegate: delegate) {
+                        presentationMode.wrappedValue.dismiss()
+                    }
                 }
                 .disabled(ipAddress.isEmpty)
             }
@@ -746,9 +963,12 @@ struct AddMusicView: View {
         .navigationTitle("Add Music")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
+                Button {
                     presentationMode.wrappedValue.dismiss()
+                } label: {
+                    Image(systemName: "xmark")
                 }
+                .tint(.primary)
             }
         }
     }
@@ -758,71 +978,119 @@ struct AddMusicView: View {
 struct LibraryView: View {
     @EnvironmentObject var libraryManager: MusicLibraryManager
     @EnvironmentObject var viewRouter: ViewRouter
+    
     @State private var isShowingAddMusicSheet = false
+    @State private var isShowingLibraryOptions = false
     @State private var isShowingDeleteConfirmation = false
+    @State private var artistToDelete: Artist?
 
     var body: some View {
         NavigationStack(path: $viewRouter.libraryPath) {
-            Group {
-                if libraryManager.artists.isEmpty {
-                    VStack(spacing: 12) {
-                        Text("Library is Empty")
-                            .font(.headline)
-                        Button("Add Music") {
-                            isShowingAddMusicSheet = true
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                    .navigationTitle("Library")
-                } else {
-                    List {
-                        ForEach(libraryManager.artists) { artist in
-                            NavigationLink(value: NavigationDestination.artist(artist)) {
-                                Text(artist.name)
-                            }
-                        }
-                    }
-                    .navigationTitle("Library")
-                    .toolbar {
-                        // For watchOS, it's often better to have distinct placements.
-                        // .cancellationAction places the button at the top-left.
-                        ToolbarItem(placement: .cancellationAction) {
-                             Button(role: .destructive) {
-                                isShowingDeleteConfirmation = true
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .tint(.red)
-                            .disabled(libraryManager.artists.isEmpty)
-                        }
-
-                        // .primaryAction is usually at the bottom-right on watchOS.
-                        ToolbarItem(placement: .primaryAction) {
-                            Button(action: { isShowingAddMusicSheet = true }) {
-                                Image(systemName: "plus")
-                            }
-                        }
+            mainContent
+                .navigationDestination(for: NavigationDestination.self) { destination in
+                    switch destination {
+                    case .artist(let id): ArtistDetailView(artistId: id)
+                    case .album(let id): AlbumDetailView(albumId: id)
                     }
                 }
-            }
-            .navigationDestination(for: NavigationDestination.self) { destination in
-                switch destination {
-                case .artist(let artist): ArtistDetailView(artist: artist)
-                case .album(let album): AlbumDetailView(album: album)
-                }
-            }
         }
         .sheet(isPresented: $isShowingAddMusicSheet) {
-            NavigationView {
-                AddMusicView()
+            NavigationView { AddMusicView() }
+        }
+        .confirmationDialog("Delete \(artistToDelete?.name ?? "Artist")?",
+                            isPresented: .constant(artistToDelete != nil),
+                            titleVisibility: .visible) {
+            Button("Delete Artist", role: .destructive) {
+                if let artist = artistToDelete {
+                    libraryManager.deleteArtist(withId: artist.id)
+                }
+                artistToDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                artistToDelete = nil
+            }
+        } message: {
+            Text("This will permanently remove the artist and all of their albums and songs.")
+        }
+        // This is the main options menu.
+        .confirmationDialog("Library Options", isPresented: $isShowingLibraryOptions, titleVisibility: .hidden) {
+            if libraryManager.isDownloading {
+                let progress = libraryManager.totalDownloadCount > 0 ? Double(libraryManager.completedDownloadCount) / Double(libraryManager.totalDownloadCount) : 0.0
+                let progressString = String(format: "%.0f%%", progress * 100)
+                Button("Downloading: \(libraryManager.completedDownloadCount) of \(libraryManager.totalDownloadCount) (\(progressString))") {}.disabled(true)
+            }
+            
+            Button("Add Music") {
+                isShowingAddMusicSheet = true
+            }
+            
+            if !libraryManager.artists.isEmpty {
+                Button("Delete Library", role: .destructive) {
+                    // This now directly triggers the second confirmation dialog.
+                    isShowingDeleteConfirmation = true
+                }
             }
         }
+        // The final confirmation for deleting the library.
         .confirmationDialog("Delete Library?", isPresented: $isShowingDeleteConfirmation, titleVisibility: .visible) {
-            Button("Delete All Music", role: .destructive) {
+            Button("Delete", role: .destructive) {
                 libraryManager.deleteLibrary()
             }
         } message: {
-            Text("This will permanently remove all downloaded music and library data.")
+            Text("This will permanently remove all downloaded music & library data.")
+        }
+    }
+
+    @ViewBuilder
+    private var mainContent: some View {
+        Group {
+            if libraryManager.artists.isEmpty && !libraryManager.isDownloading {
+                emptyLibraryView
+            } else {
+                artistListView
+            }
+        }
+        .navigationTitle("Library")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(action: {
+                    isShowingLibraryOptions = true
+                }) {
+                    ZStack {
+                        Circle().fill(Color.white.opacity(0.15))
+                        Image(systemName: "ellipsis")
+                    }
+                    .frame(width: 30, height: 30)
+                }
+                .tint(.primary)
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var emptyLibraryView: some View {
+        VStack(spacing: 12) {
+            Text("Library is Empty")
+                .font(.headline)
+            Button("Add Music") {
+                isShowingAddMusicSheet = true
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
+
+    private var artistListView: some View {
+        List {
+            ForEach(libraryManager.artists) { artist in
+                Text(artist.name)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        viewRouter.libraryPath.append(.artist(id: artist.id))
+                    }
+                    .onLongPressGesture {
+                        artistToDelete = artist
+                    }
+            }
         }
     }
 }
@@ -833,9 +1101,41 @@ struct ArtistDetailView: View {
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var musicPlayer: MusicPlayerManager
     @EnvironmentObject var viewRouter: ViewRouter
-    let artist: Artist
+    @EnvironmentObject var libraryManager: MusicLibraryManager
+    let artistId: UUID
+    @State private var albumToDelete: Album?
+
+    private var artist: Artist? {
+        libraryManager.artists.first { $0.id == artistId }
+    }
     
     var body: some View {
+        Group {
+            if let artist = artist {
+                mainContentView(for: artist)
+            } else {
+                notFoundView
+            }
+        }
+        .confirmationDialog("Delete \(albumToDelete?.name ?? "Album")?",
+                            isPresented: .constant(albumToDelete != nil),
+                            titleVisibility: .visible) {
+            Button("Delete Album", role: .destructive) {
+                if let album = albumToDelete {
+                    libraryManager.deleteAlbum(withId: album.id)
+                }
+                albumToDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                albumToDelete = nil
+            }
+        } message: {
+            Text("This will permanently remove the album and all of its songs.")
+        }
+    }
+    
+    @ViewBuilder
+    private func mainContentView(for artist: Artist) -> some View {
         VStack(spacing: 0) {
             HStack {
                 Button(action: { presentationMode.wrappedValue.dismiss() }) {
@@ -843,16 +1143,6 @@ struct ArtistDetailView: View {
                 }
                 .frame(width: 30, height: 30).background(Color.white.opacity(0.15)).clipShape(Circle())
                 Spacer()
-                Button(action: {
-                    let allSongs = artist.albums.flatMap { $0.songs }
-                    if !allSongs.isEmpty {
-                        musicPlayer.setPlaylist(songs: allSongs, startAt: 0)
-                        viewRouter.currentTab = .player
-                    }
-                }) {
-                    Image(systemName: "play.fill").font(.body.weight(.semibold))
-                }
-                .frame(width: 30, height: 30).background(Color.white.opacity(0.15)).clipShape(Circle())
             }
             .padding(.horizontal).padding(.bottom, 4)
 
@@ -860,12 +1150,46 @@ struct ArtistDetailView: View {
 
             List {
                 ForEach(artist.albums) { album in
-                    NavigationLink(value: NavigationDestination.album(album)) { Text(album.name) }
+                    Text(album.name)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            viewRouter.libraryPath.append(.album(id: album.id))
+                        }
+                        .onLongPressGesture {
+                            self.albumToDelete = album
+                        }
+                }
+                
+                Section {
+                    Button(action: {
+                        let allSongs = artist.albums.flatMap { $0.songs }
+                        if !allSongs.isEmpty {
+                            musicPlayer.setPlaylist(songs: allSongs, startAt: 0)
+                            viewRouter.currentTab = .player
+                        }
+                    }) {
+                        Label("Play All", systemImage: "play.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .listRowBackground(Color.clear)
                 }
             }
             .listStyle(.plain)
         }
         .padding(.top, 6).ignoresSafeArea(edges: .top).navigationBarHidden(true).navigationBarBackButtonHidden(true)
+        .onAppear {
+            if libraryManager.artists.first(where: { $0.id == artistId }) == nil {
+                 presentationMode.wrappedValue.dismiss()
+            }
+        }
+    }
+    
+    private var notFoundView: some View {
+        Text("Artist not found.")
+            .onAppear {
+                presentationMode.wrappedValue.dismiss()
+            }
     }
 }
 
@@ -873,10 +1197,44 @@ struct AlbumDetailView: View {
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var musicPlayer: MusicPlayerManager
     @EnvironmentObject var viewRouter: ViewRouter
+    @EnvironmentObject var libraryManager: MusicLibraryManager
+    let albumId: UUID
+    
     @State private var songToAddToPlaylist: Song?
-    let album: Album
+    @State private var songToDelete: Song?
+
+    private var album: Album? {
+        libraryManager.artists.flatMap { $0.albums }.first { $0.id == albumId }
+    }
 
     var body: some View {
+        Group {
+            if let album = album {
+                mainContentView(for: album)
+            } else {
+                notFoundView
+            }
+        }
+        .sheet(item: $songToAddToPlaylist) { song in
+            PlayerAddToPlaylistView(song: song) { _ in }
+        }
+        .confirmationDialog("Delete \(songToDelete?.title ?? "Song")?",
+                            isPresented: .constant(songToDelete != nil),
+                            titleVisibility: .visible) {
+            Button("Delete Song", role: .destructive) {
+                if let song = songToDelete {
+                    libraryManager.deleteSong(withId: song.id)
+                }
+                songToDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                songToDelete = nil
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func mainContentView(for album: Album) -> some View {
         VStack(spacing: 0) {
             HStack {
                 Button(action: { presentationMode.wrappedValue.dismiss() }) {
@@ -884,15 +1242,6 @@ struct AlbumDetailView: View {
                 }
                 .frame(width: 30, height: 30).background(Color.white.opacity(0.15)).clipShape(Circle())
                 Spacer()
-                Button(action: {
-                    if !album.songs.isEmpty {
-                        musicPlayer.setPlaylist(songs: album.songs, startAt: 0)
-                        viewRouter.currentTab = .player
-                    }
-                }) {
-                    Image(systemName: "play.fill").font(.body.weight(.semibold))
-                }
-                .frame(width: 30, height: 30).background(Color.white.opacity(0.15)).clipShape(Circle())
             }
             .padding(.horizontal).padding(.bottom, 4)
             
@@ -913,15 +1262,35 @@ struct AlbumDetailView: View {
                                 viewRouter.currentTab = .player
                             }
                         }
-                        .onLongPressGesture { self.songToAddToPlaylist = song }
+                        .onLongPressGesture {
+                            self.songToDelete = song
+                        }
+                }
+
+                Section {
+                        Button(action: {
+                            if !album.songs.isEmpty {
+                                musicPlayer.setPlaylist(songs: album.songs, startAt: 0)
+                                viewRouter.currentTab = .player
+                            }
+                        }) {
+                            Label("Play All", systemImage: "play.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .listRowBackground(Color.clear)
                 }
             }
             .listStyle(.plain)
         }
         .padding(.top, 6).ignoresSafeArea(edges: .top).navigationBarHidden(true).navigationBarBackButtonHidden(true)
-        .sheet(item: $songToAddToPlaylist) { song in
-            PlayerAddToPlaylistView(song: song) { _ in }
-        }
+    }
+
+    private var notFoundView: some View {
+        Text("Album not found.")
+            .onAppear {
+                presentationMode.wrappedValue.dismiss()
+            }
     }
 }
 
@@ -991,41 +1360,49 @@ struct PlaylistDetailView: View {
                     }
                     .frame(width: 30, height: 30).background(Color.white.opacity(0.15)).clipShape(Circle())
                     Spacer()
-                    Button(action: { isAddingSongs = true }) {
-                        Image(systemName: "plus").font(.body.weight(.semibold))
-                    }
-                    .frame(width: 30, height: 30).background(Color.white.opacity(0.15)).clipShape(Circle())
                 }
                 .padding(.horizontal).padding(.bottom, 4)
                 
                 Text(playlist.name).font(.title3.bold()).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal).padding(.bottom, 8)
                 
                 ZStack {
-                    List {
-                        ForEach(playlist.songs) { song in
-                             VStack(alignment: .leading) {
-                                 Text(song.title).font(.subheadline)
-                                 Text(song.artist).font(.footnote).foregroundColor(.secondary)
-                             }
-                             .contentShape(Rectangle())
-                             .onTapGesture {
-                                 if let index = playlist.songs.firstIndex(of: song) {
-                                     musicPlayer.setPlaylist(songs: playlist.songs, startAt: index)
-                                     viewRouter.currentTab = .player
-                                 }
-                             }
-                        }
-                        .onDelete { indexSet in
-                            playlistManager.removeSongs(at: indexSet, from: playlist.id)
-                        }
-                    }
-                    .listStyle(.plain)
-
                     if playlist.songs.isEmpty {
-                        VStack {
-                            Text("This Playlist is Empty").font(.headline)
-                            Text("Tap the '+' button to add songs.").font(.subheadline).foregroundColor(.secondary).multilineTextAlignment(.center).padding(.horizontal)
+                        VStack(spacing: 12) {
+                            Text("Playlist is Empty").font(.headline)
+                            Button("Add Songs") {
+                                isAddingSongs = true
+                            }
+                            .buttonStyle(.borderedProminent)
                         }
+                    } else {
+                        List {
+                            ForEach(playlist.songs) { song in
+                                VStack(alignment: .leading) {
+                                    Text(song.title).font(.subheadline)
+                                    Text(song.artist).font(.footnote).foregroundColor(.secondary)
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    if let index = playlist.songs.firstIndex(of: song) {
+                                        musicPlayer.setPlaylist(songs: playlist.songs, startAt: index)
+                                        viewRouter.currentTab = .player
+                                    }
+                                }
+                            }
+                            .onDelete { indexSet in
+                                playlistManager.removeSongs(at: indexSet, from: playlist.id)
+                            }
+                            
+                            Section {
+                                Button(action: { isAddingSongs = true }) {
+                                    Label("Add Songs", systemImage: "plus")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .listRowBackground(Color.clear)
+                            }
+                        }
+                        .listStyle(.plain)
                     }
                 }
             }
@@ -1265,6 +1642,7 @@ struct PlayerView: View {
     @State private var songForPlaylistAction: Song?
     @State private var showOptionsMenu = false
     @State private var toastMessage: String?
+    @State private var showAudioOutputSheet = false
 
     var body: some View {
         ZStack {
@@ -1288,23 +1666,28 @@ struct PlayerView: View {
         .onChange(of: musicPlayer.volume) { _, newVolume in crownRotation = 1.0 - Double(newVolume) }
         .task(id: musicPlayer.currentSong?.id) { await updateBackgroundColor() }
         .navigationTitle("Now Playing")
-        .overlay(alignment: .topTrailing) {
+        .overlay(alignment: .topLeading) {
             if musicPlayer.currentSong != nil {
                 Button(action: { showOptionsMenu = true }) { Image(systemName: "ellipsis").font(.body) }
                     .frame(width: 30, height: 30)
                     .background(Color.white.opacity(0.15))
                     .clipShape(Circle())
-                    .padding(.trailing)
+                    .padding(.leading)
             }
         }
         .confirmationDialog("Actions", isPresented: $showOptionsMenu, titleVisibility: .hidden) {
+            Button("Audio Output") {
+                showAudioOutputSheet = true
+            }
             Button("Add to Playlist") { songForPlaylistAction = musicPlayer.currentSong }
             
-            if let song = musicPlayer.currentSong, let artist = libraryManager.artists.first(where: { $0.name == song.artist }) {
-                if let album = artist.albums.first(where: { $0.name == song.album }) {
-                    Button("Go to Album") { viewRouter.navigateTo(artist: artist, album: album) }
+            if let song = musicPlayer.currentSong, let ids = libraryManager.findArtistAndAlbumIds(for: song) {
+                Button("Go to Album") {
+                    viewRouter.navigateTo(artistId: ids.artistId, albumId: ids.albumId)
                 }
-                Button("Go to Artist") { viewRouter.navigateTo(artist: artist, album: nil) }
+                Button("Go to Artist") {
+                    viewRouter.navigateTo(artistId: ids.artistId, albumId: nil)
+                }
             }
             
             Button(musicPlayer.repeatMode == .all ? "Repeat All ✓" : "Repeat All") { musicPlayer.setRepeatMode(to: .all) }
@@ -1315,6 +1698,9 @@ struct PlayerView: View {
             PlayerAddToPlaylistView(song: song) { playlistName in
                 withAnimation { toastMessage = "Added to \"\(playlistName)\"" }
             }
+        }
+        .sheet(isPresented: $showAudioOutputSheet) {
+            AudioOutputInfoView()
         }
     }
 
@@ -1350,6 +1736,33 @@ struct PlayerView: View {
         return nil
     }
 }
+
+// MARK: - Audio Output Info View
+struct AudioOutputInfoView: View {
+    @Environment(\.presentationMode) var presentationMode
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "airplayaudio")
+                .font(.system(size: 40))
+                .foregroundColor(.accentColor)
+            
+            Text("Audio Output")
+                .font(.headline)
+            
+            Text("To change the audio output, open the Control Center by swiping up from the bottom of the screen and tap the AirPlay icon.")
+                .font(.footnote)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            Button("Done") {
+                presentationMode.wrappedValue.dismiss()
+            }
+        }
+        .padding()
+    }
+}
+
 
 // MARK: - PlayerView Subviews
 private struct SongInfoView: View {
