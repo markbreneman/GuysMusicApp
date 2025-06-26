@@ -278,13 +278,24 @@ class MusicLibraryManager: NSObject, ObservableObject {
     @Published var loadingMessage = ""
     @Published var downloadError: String?
     
-    // These properties will now be correctly restored on app launch.
     @Published var isDownloading = false
     @Published var totalDownloadCount = 0
-    @Published var completedDownloadCount = 0
+    // UPDATED: Added a didSet property observer to check the download status immediately.
+    @Published var completedDownloadCount = 0 {
+        didSet {
+            // Check if all files have been downloaded.
+            // This allows the UI to hide the progress bar instantly without waiting for the
+            // final URLSession "didFinishEvents" callback, which can have a delay.
+            if totalDownloadCount > 0 && completedDownloadCount >= totalDownloadCount {
+                DispatchQueue.main.async {
+                    self.isDownloading = false
+                    print("Download count reached total. Hiding progress bar immediately.")
+                }
+            }
+        }
+    }
 
     private let libraryStorageKey = "musicLibrary"
-    // NEW: Keys for persisting download state across app launches.
     private let downloadInProgressKey = "downloadInProgress"
     private let totalDownloadCountKey = "totalDownloadCountForCurrentSession"
     
@@ -296,8 +307,6 @@ class MusicLibraryManager: NSObject, ObservableObject {
 
     override init() {
         super.init()
-        // The order is important: load library data first, then check for an
-        // ongoing download state, and finally set up observers for new events.
         loadLibraryFromStorage()
         restoreDownloadState()
         setupNotificationObservers()
@@ -308,22 +317,20 @@ class MusicLibraryManager: NSObject, ObservableObject {
         NotificationCenter.default.addObserver(self, selector: #selector(handleAllDownloadsFinished), name: .allDownloadsFinished, object: nil)
     }
     
-    // NEW: This method checks UserDefaults on app start to see if a download
-    // was in progress. If so, it restores the UI state.
     private func restoreDownloadState() {
         if UserDefaults.standard.bool(forKey: downloadInProgressKey) {
             DispatchQueue.main.async {
                 self.isDownloading = true
                 self.totalDownloadCount = UserDefaults.standard.integer(forKey: self.totalDownloadCountKey)
-                // We recalculate completed files by checking the disk. This is the most reliable way
-                // to know the true progress after an app relaunch.
+                // Recalculating completed files ensures the count is accurate on relaunch.
+                // The `didSet` on `completedDownloadCount` will then run, correctly setting
+                // `isDownloading` to false if the download had already finished.
                 self.completedDownloadCount = self.countDownloadedFiles()
                 print("Restored download state. Progress: \(self.completedDownloadCount) / \(self.totalDownloadCount)")
             }
         }
     }
 
-    // NEW: A helper function to count how many song files actually exist on disk.
     private func countDownloadedFiles() -> Int {
         let allSongs = self.artists.flatMap { $0.albums.flatMap { $0.songs } }
         let fileManager = FileManager.default
@@ -338,15 +345,17 @@ class MusicLibraryManager: NSObject, ObservableObject {
 
     @objc private func handleAllDownloadsFinished() {
         DispatchQueue.main.async {
+            // This is the final cleanup. It's possible `isDownloading` is already false
+            // due to the `didSet` observer, which is fine. This ensures all state is reset.
             self.isDownloading = false
             self.totalDownloadCount = 0
             self.completedDownloadCount = 0
             
-            // UPDATED: Clear the persisted download state from UserDefaults.
+            // Clear the persisted download state from UserDefaults.
             UserDefaults.standard.set(false, forKey: self.downloadInProgressKey)
             UserDefaults.standard.removeObject(forKey: self.totalDownloadCountKey)
             
-            print("All downloads finished. Cleaned up download state.")
+            print("All downloads finished. Cleaned up all session state.")
         }
     }
 
@@ -396,7 +405,7 @@ class MusicLibraryManager: NSObject, ObservableObject {
             print("Removed library metadata from UserDefaults.")
             deleteAllLocalFiles()
             
-            // UPDATED: Also clear any pending download state when the library is deleted.
+            // Also clear any pending download state when the library is deleted.
             self.isDownloading = false
             self.totalDownloadCount = 0
             self.completedDownloadCount = 0
@@ -521,7 +530,7 @@ class MusicLibraryManager: NSObject, ObservableObject {
         downloadError = nil
         loadingMessage = "Clearing old library..."
         
-        // UPDATED: Initiate download tracking state.
+        // Initiate download tracking state.
         self.isDownloading = true
         self.completedDownloadCount = 0
         self.totalDownloadCount = 0 // Will be set after fetching index.
@@ -573,7 +582,7 @@ class MusicLibraryManager: NSObject, ObservableObject {
                 print("Step 4: Using passed-in app delegate.")
                 let session = delegate.backgroundURLSession
 
-                // UPDATED: Set and persist the total download count.
+                // Set and persist the total download count.
                 let allSongs = finalArtists.flatMap({ $0.albums.flatMap({ $0.songs }) })
                 self.totalDownloadCount = allSongs.count
                 UserDefaults.standard.set(self.totalDownloadCount, forKey: self.totalDownloadCountKey)
@@ -602,7 +611,7 @@ class MusicLibraryManager: NSObject, ObservableObject {
                 completion()
 
             } catch {
-                // UPDATED: If download setup fails, we must reset the download state.
+                // If download setup fails, we must reset the download state.
                 let errorMessage = "Error: \(error.localizedDescription)"
                 print("ERROR in startBackgroundDownload: \(errorMessage)")
                 self.isLoading = false
@@ -974,6 +983,35 @@ struct AddMusicView: View {
     }
 }
 
+// MARK: - Download Progress View
+// NEW: This is the dedicated view for showing the download progress bar and text.
+struct DownloadProgressView: View {
+    @EnvironmentObject var libraryManager: MusicLibraryManager
+
+    var body: some View {
+        VStack(spacing: 5) {
+            // Ensure we don't divide by zero and that a download is actually in progress.
+            if libraryManager.isDownloading && libraryManager.totalDownloadCount > 0 {
+                let progress = Double(libraryManager.completedDownloadCount) / Double(libraryManager.totalDownloadCount)
+                
+                ProgressView(value: progress)
+                    .progressViewStyle(LinearProgressViewStyle(tint: .accentColor))
+
+                Text("Downloading \(libraryManager.completedDownloadCount) / \(libraryManager.totalDownloadCount)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else if libraryManager.isDownloading {
+                // This state is for when downloading has started but we haven't got the total count yet.
+                ProgressView() // Shows an indeterminate spinner
+                    .padding(.bottom, 4)
+                Text("Preparing download...")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+}
+
 // MARK: - Library View
 struct LibraryView: View {
     @EnvironmentObject var libraryManager: MusicLibraryManager
@@ -1079,18 +1117,32 @@ struct LibraryView: View {
         }
     }
 
+    // UPDATED: This view now includes the logic to show the progress bar.
     private var artistListView: some View {
-        List {
-            ForEach(libraryManager.artists) { artist in
-                Text(artist.name)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        viewRouter.libraryPath.append(.artist(id: artist.id))
-                    }
-                    .onLongPressGesture {
-                        artistToDelete = artist
-                    }
+        // We use a VStack to place the progress bar above the List.
+        VStack(spacing: 0) {
+            // The logic to show the progress view is now simpler.
+            // It relies on the `isDownloading` property, which is set to `false`
+            // immediately upon completion by the new `didSet` observer.
+            if libraryManager.isDownloading {
+                DownloadProgressView()
+                    .padding(.horizontal)
+                    .padding(.top, 8) // Give it some space from the title
             }
+            
+            List {
+                ForEach(libraryManager.artists) { artist in
+                    Text(artist.name)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            viewRouter.libraryPath.append(.artist(id: artist.id))
+                        }
+                        .onLongPressGesture {
+                            artistToDelete = artist
+                        }
+                }
+            }
+            .listStyle(.plain)
         }
     }
 }
