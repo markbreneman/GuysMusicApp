@@ -114,6 +114,41 @@ class ExtensionDelegate: NSObject, WKApplicationDelegate, ObservableObject, URLS
     }
 }
 
+// MARK: - Global Button Styles
+// This custom button style mimics the look of many default watchOS buttons.
+// It is defined here globally so it can be used across the entire app for consistency.
+struct ActionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            // Using a system font style ensures it adapts correctly.
+            .font(.system(.headline, design: .rounded).weight(.semibold))
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .background(
+                // The background gets slightly darker when the button is pressed.
+                Color.white.opacity(configuration.isPressed ? 0.25 : 0.15)
+            )
+            .clipShape(Capsule())
+            // A subtle scale effect provides visual feedback on tap.
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+// This custom button style is for circular icon buttons, like playback controls.
+struct CircleIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(maxWidth: .infinity, maxHeight: .infinity) // Fill the frame provided by the parent
+            .background(
+                Color.white.opacity(configuration.isPressed ? 0.25 : 0.15)
+            )
+            .clipShape(Circle())
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
 // MARK: - Navigation
 enum NavigationDestination: Hashable {
     case artist(id: UUID)
@@ -400,7 +435,7 @@ class MusicLibraryManager: NSObject, ObservableObject {
             self.completedDownloadCount = 0
             UserDefaults.standard.set(false, forKey: downloadInProgressKey)
             UserDefaults.standard.removeObject(forKey: totalDownloadCountKey)
-            print("Cleared any active download session state.")
+            print("Cleared any active download state.")
             
             isLoading = false
             loadingMessage = ""
@@ -875,34 +910,14 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
 }
 
 // MARK: - Terms and Conditions View
-// UPDATED: This view has been reverted to use a standard NavigationStack and
-// .navigationTitle for a more native watchOS header appearance. The custom
-// animated header has been removed.
 struct TermsAndConditionsView: View {
     @Binding var hasAcceptedTerms: Bool
     @State private var hasDeclined = false
-
-    // This custom button style mimics the look of many default watchOS buttons.
-    private struct ActionButtonStyle: ButtonStyle {
-        func makeBody(configuration: Configuration) -> some View {
-            configuration.label
-                .font(.system(.headline, design: .rounded).weight(.semibold))
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity)
-                .background(
-                    Color.white.opacity(configuration.isPressed ? 0.25 : 0.15)
-                )
-                .clipShape(Capsule())
-                .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
-                .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
-        }
-    }
 
     var body: some View {
         if hasDeclined {
             declinedView
         } else {
-            // We now use a NavigationStack to get the standard scrolling title behavior.
             NavigationStack {
                 ScrollView {
                     mainContent
@@ -912,7 +927,7 @@ struct TermsAndConditionsView: View {
         }
     }
     
-    /// The main content of the terms view, including the text and action buttons.
+    /// The main content of the terms view.
     private var mainContent: some View {
         VStack(spacing: 20) {
             Text(termsText)
@@ -934,7 +949,6 @@ struct TermsAndConditionsView: View {
             }
             .padding([.horizontal, .bottom])
         }
-        // No top padding is needed, as the navigation title provides spacing.
         .background(.black)
     }
     
@@ -976,7 +990,6 @@ struct TermsAndConditionsView: View {
 
 
 // MARK: - Main Content View
-// UPDATED: Logic is moved here to conditionally show either the Terms or the main app.
 struct ContentView: View {
     @StateObject private var musicPlayer = MusicPlayerManager()
     @StateObject private var libraryManager = MusicLibraryManager()
@@ -984,13 +997,10 @@ struct ContentView: View {
     @StateObject private var viewRouter = ViewRouter()
     @Environment(\.scenePhase) private var scenePhase
     
-    // This property now controls which view is shown as the root.
     @AppStorage("hasAcceptedTerms_v1") private var hasAcceptedTerms: Bool = false
 
     var body: some View {
-        // If terms are accepted, show the main app. Otherwise, show the terms view.
         if hasAcceptedTerms {
-            // The main TabView of the application.
             TabView(selection: $viewRouter.currentTab) {
                 PlayerView().tabItem {
                     Image(systemName: "circle")
@@ -1015,7 +1025,6 @@ struct ContentView: View {
                 musicPlayer.handleScenePhaseChange(newPhase: newPhase)
             }
         } else {
-            // The TermsAndConditionsView is now the root view until terms are accepted.
             TermsAndConditionsView(hasAcceptedTerms: $hasAcceptedTerms)
         }
     }
@@ -1059,6 +1068,8 @@ struct AddMusicView: View {
                         presentationMode.wrappedValue.dismiss()
                     }
                 }
+                .buttonStyle(ActionButtonStyle())
+                .tint(.accentColor)
                 .disabled(ipAddress.isEmpty)
             }
         }
@@ -1201,7 +1212,8 @@ struct LibraryView: View {
             Button("Add Music") {
                 isShowingAddMusicSheet = true
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(ActionButtonStyle())
+            .tint(.accentColor)
         }
     }
 
@@ -1306,7 +1318,8 @@ struct ArtistDetailView: View {
                         Label("Play All", systemImage: "play.fill")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(ActionButtonStyle())
+                    .tint(.accentColor)
                     .listRowBackground(Color.clear)
                 }
             }
@@ -1412,7 +1425,8 @@ struct AlbumDetailView: View {
                             Label("Play All", systemImage: "play.fill")
                                 .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(ActionButtonStyle())
+                        .tint(.accentColor)
                         .listRowBackground(Color.clear)
                 }
             }
@@ -1444,13 +1458,17 @@ struct PlaylistsView: View {
                 .onDelete { indexSet in
                     playlistManager.playlists.remove(atOffsets: indexSet)
                 }
-            }
-            .navigationTitle("Playlists")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button(action: { isShowingCreateSheet = true }) { Image(systemName: "plus") }
+
+                Section {
+                    Button(action: { isShowingCreateSheet = true }) {
+                        Label("New Playlist", systemImage: "plus")
+                    }
+                    .buttonStyle(ActionButtonStyle())
+                    .tint(.accentColor)
+                    .listRowBackground(Color.clear)
                 }
             }
+            .navigationTitle("Playlists")
             .sheet(isPresented: $isShowingCreateSheet) {
                 NavigationView {
                     VStack {
@@ -1462,7 +1480,8 @@ struct PlaylistsView: View {
                                 newPlaylistName = ""; isShowingCreateSheet = false
                             }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(ActionButtonStyle())
+                        .tint(.accentColor)
                     }
                     .navigationTitle("New Playlist")
                     .toolbar {
@@ -1507,7 +1526,8 @@ struct PlaylistDetailView: View {
                             Button("Add Songs") {
                                 isAddingSongs = true
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(ActionButtonStyle())
+                            .tint(.accentColor)
                         }
                     } else {
                         List {
@@ -1533,7 +1553,8 @@ struct PlaylistDetailView: View {
                                     Label("Add Songs", systemImage: "plus")
                                         .frame(maxWidth: .infinity)
                                 }
-                                .buttonStyle(.bordered)
+                                .buttonStyle(ActionButtonStyle())
+                                .tint(.accentColor)
                                 .listRowBackground(Color.clear)
                             }
                         }
@@ -1720,7 +1741,11 @@ struct PlayerCreateAndAddView: View {
                         }
                     }
                 }
-                .buttonStyle(.borderedProminent).frame(maxWidth: .infinity).disabled(newPlaylistName.isEmpty).padding()
+                .buttonStyle(ActionButtonStyle())
+                .tint(.accentColor)
+                .frame(maxWidth: .infinity)
+                .disabled(newPlaylistName.isEmpty)
+                .padding()
             }
             .navigationTitle("New Playlist")
         }
@@ -1893,6 +1918,8 @@ struct AudioOutputInfoView: View {
             Button("Done") {
                 presentationMode.wrappedValue.dismiss()
             }
+            .buttonStyle(ActionButtonStyle())
+            .tint(.accentColor)
         }
         .padding()
     }
@@ -1922,22 +1949,47 @@ private struct PlayerControlsView: View {
     @ObservedObject var musicPlayer: MusicPlayerManager
     
     var body: some View {
-        HStack(spacing: 15) {
-            Button(action: { musicPlayer.previousTrack() }) { Image(systemName: "backward.fill").font(.title3) }
-                .frame(width: 35, height: 35).background(Color.white.opacity(0.15)).clipShape(Circle()).disabled(musicPlayer.currentSong == nil)
-
-            ZStack {
-                Circle().stroke(Color.white.opacity(0.3), lineWidth: 4)
-                Circle().trim(from: 0.0, to: musicPlayer.playbackProgress).stroke(Color.white, style: StrokeStyle(lineWidth: 4, lineCap: .round)).rotationEffect(.degrees(-90))
-                Button(action: { musicPlayer.playPause() }) {
-                    Image(systemName: musicPlayer.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 26)).padding(.leading, musicPlayer.isPlaying ? 0 : 2)
-                }
-                .frame(width: 30, height: 30).background(Color.white.opacity(0.15)).clipShape(Circle()).disabled(musicPlayer.currentSong == nil)
+        HStack(spacing: 12) {
+            // Previous Track Button
+            Button(action: { musicPlayer.previousTrack() }) {
+                Image(systemName: "backward.fill")
+                    .font(.title3)
             }
+            .buttonStyle(CircleIconButtonStyle())
             .frame(width: 40, height: 40)
+            .tint(.white)
+            .disabled(musicPlayer.currentSong == nil)
 
-            Button(action: { musicPlayer.nextTrack() }) { Image(systemName: "forward.fill").font(.title3) }
-                .frame(width: 35, height: 35).background(Color.white.opacity(0.15)).clipShape(Circle()).disabled(musicPlayer.currentSong == nil)
+            // Play/Pause Button with Progress Ring
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.3), lineWidth: 4)
+                Circle()
+                    .trim(from: 0.0, to: musicPlayer.playbackProgress)
+                    .stroke(Color.white, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                
+                Button(action: { musicPlayer.playPause() }) {
+                    Image(systemName: musicPlayer.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 28))
+                        .padding(.leading, musicPlayer.isPlaying ? 0 : 3)
+                }
+                .buttonStyle(CircleIconButtonStyle())
+                .frame(width: 40, height: 40)
+                .tint(.white)
+                .disabled(musicPlayer.currentSong == nil)
+            }
+            .frame(width: 46, height: 46)
+
+            // Next Track Button
+            Button(action: { musicPlayer.nextTrack() }) {
+                Image(systemName: "forward.fill")
+                    .font(.title3)
+            }
+            .buttonStyle(CircleIconButtonStyle())
+            .frame(width: 40, height: 40)
+            .tint(.white)
+            .disabled(musicPlayer.currentSong == nil)
         }
         .padding(.bottom)
     }
