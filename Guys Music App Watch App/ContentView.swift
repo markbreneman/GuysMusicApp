@@ -280,16 +280,12 @@ class MusicLibraryManager: NSObject, ObservableObject {
     
     @Published var isDownloading = false
     @Published var totalDownloadCount = 0
-    // UPDATED: Added a didSet property observer to check the download status immediately.
     @Published var completedDownloadCount = 0 {
         didSet {
-            // Check if all files have been downloaded.
-            // This allows the UI to hide the progress bar instantly without waiting for the
-            // final URLSession "didFinishEvents" callback, which can have a delay.
             if totalDownloadCount > 0 && completedDownloadCount >= totalDownloadCount {
-                DispatchQueue.main.async {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     self.isDownloading = false
-                    print("Download count reached total. Hiding progress bar immediately.")
+                    print("Download count reached total. Hiding progress bar.")
                 }
             }
         }
@@ -322,9 +318,6 @@ class MusicLibraryManager: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 self.isDownloading = true
                 self.totalDownloadCount = UserDefaults.standard.integer(forKey: self.totalDownloadCountKey)
-                // Recalculating completed files ensures the count is accurate on relaunch.
-                // The `didSet` on `completedDownloadCount` will then run, correctly setting
-                // `isDownloading` to false if the download had already finished.
                 self.completedDownloadCount = self.countDownloadedFiles()
                 print("Restored download state. Progress: \(self.completedDownloadCount) / \(self.totalDownloadCount)")
             }
@@ -345,13 +338,10 @@ class MusicLibraryManager: NSObject, ObservableObject {
 
     @objc private func handleAllDownloadsFinished() {
         DispatchQueue.main.async {
-            // This is the final cleanup. It's possible `isDownloading` is already false
-            // due to the `didSet` observer, which is fine. This ensures all state is reset.
             self.isDownloading = false
             self.totalDownloadCount = 0
             self.completedDownloadCount = 0
             
-            // Clear the persisted download state from UserDefaults.
             UserDefaults.standard.set(false, forKey: self.downloadInProgressKey)
             UserDefaults.standard.removeObject(forKey: self.totalDownloadCountKey)
             
@@ -405,7 +395,6 @@ class MusicLibraryManager: NSObject, ObservableObject {
             print("Removed library metadata from UserDefaults.")
             deleteAllLocalFiles()
             
-            // Also clear any pending download state when the library is deleted.
             self.isDownloading = false
             self.totalDownloadCount = 0
             self.completedDownloadCount = 0
@@ -530,10 +519,9 @@ class MusicLibraryManager: NSObject, ObservableObject {
         downloadError = nil
         loadingMessage = "Clearing old library..."
         
-        // Initiate download tracking state.
         self.isDownloading = true
         self.completedDownloadCount = 0
-        self.totalDownloadCount = 0 // Will be set after fetching index.
+        self.totalDownloadCount = 0
         UserDefaults.standard.set(true, forKey: downloadInProgressKey)
         
         Task {
@@ -582,7 +570,6 @@ class MusicLibraryManager: NSObject, ObservableObject {
                 print("Step 4: Using passed-in app delegate.")
                 let session = delegate.backgroundURLSession
 
-                // Set and persist the total download count.
                 let allSongs = finalArtists.flatMap({ $0.albums.flatMap({ $0.songs }) })
                 self.totalDownloadCount = allSongs.count
                 UserDefaults.standard.set(self.totalDownloadCount, forKey: self.totalDownloadCountKey)
@@ -611,14 +598,12 @@ class MusicLibraryManager: NSObject, ObservableObject {
                 completion()
 
             } catch {
-                // If download setup fails, we must reset the download state.
                 let errorMessage = "Error: \(error.localizedDescription)"
                 print("ERROR in startBackgroundDownload: \(errorMessage)")
                 self.isLoading = false
                 self.isDownloading = false
                 self.downloadError = errorMessage
                 
-                // Also reset the persisted state to prevent incorrect UI on next launch.
                 UserDefaults.standard.set(false, forKey: self.downloadInProgressKey)
                 UserDefaults.standard.removeObject(forKey: self.totalDownloadCountKey)
             }
@@ -873,16 +858,13 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
         audioPlayer?.stop()
         isPlaying = false
 
-        // Stop any running timers
         stopProgressTimer()
         invalidateTimers()
 
-        // Clear the current playback state to reset the UI
         playbackProgress = 0.0
         currentSong = nil
         playlist.removeAll()
 
-        // Deactivate the audio session to allow other apps to use it.
         do {
             try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             print("Audio session deactivated.")
@@ -892,37 +874,149 @@ class MusicPlayerManager: NSObject, ObservableObject, AVAudioPlayerDelegate {
     }
 }
 
+// MARK: - Terms and Conditions View
+// UPDATED: This view has been reverted to use a standard NavigationStack and
+// .navigationTitle for a more native watchOS header appearance. The custom
+// animated header has been removed.
+struct TermsAndConditionsView: View {
+    @Binding var hasAcceptedTerms: Bool
+    @State private var hasDeclined = false
+
+    // This custom button style mimics the look of many default watchOS buttons.
+    private struct ActionButtonStyle: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .font(.system(.headline, design: .rounded).weight(.semibold))
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(
+                    Color.white.opacity(configuration.isPressed ? 0.25 : 0.15)
+                )
+                .clipShape(Capsule())
+                .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+                .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+        }
+    }
+
+    var body: some View {
+        if hasDeclined {
+            declinedView
+        } else {
+            // We now use a NavigationStack to get the standard scrolling title behavior.
+            NavigationStack {
+                ScrollView {
+                    mainContent
+                }
+                .navigationTitle("Terms & Conditions")
+            }
+        }
+    }
+    
+    /// The main content of the terms view, including the text and action buttons.
+    private var mainContent: some View {
+        VStack(spacing: 20) {
+            Text(termsText)
+                .font(.footnote)
+                .padding(.horizontal)
+            
+            VStack(spacing: 10) {
+                Button("Accept") {
+                    hasAcceptedTerms = true
+                }
+                .buttonStyle(ActionButtonStyle())
+                .tint(.green)
+
+                Button("Decline") {
+                    withAnimation { hasDeclined = true }
+                }
+                .buttonStyle(ActionButtonStyle())
+                .tint(.red)
+            }
+            .padding([.horizontal, .bottom])
+        }
+        // No top padding is needed, as the navigation title provides spacing.
+        .background(.black)
+    }
+    
+    /// The view shown when the user declines the terms.
+    private var declinedView: some View {
+        VStack {
+            Spacer()
+            Image(systemName: "hand.raised.slash.fill")
+                .font(.system(size: 40))
+                .foregroundColor(.red)
+                .padding(.bottom, 8)
+            Text("Terms Declined")
+                .font(.headline)
+                .padding(.bottom, 4)
+            Text("You must accept the terms to use this app. Please restart the application to see the terms again.")
+                .font(.footnote)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            Spacer()
+        }
+    }
+    
+    private let termsText = """
+    Welcome to WatchMusic!
+
+    By using this application, you agree to the following terms and conditions. Please read them carefully.
+
+    1.  **License to Use:** This app is for your personal, non-commercial use only. You may download and store music for offline playback on this device, provided you have the legal rights to do so.
+
+    2.  **Content Responsibility:** You are solely responsible for the content you download. Ensure you have obtained the necessary permissions or licenses for any copyrighted material. The developers of this app are not liable for any copyright infringement.
+
+    3.  **No Warranty:** This application is provided "as is" without any warranties of any kind, express or implied. We do not guarantee that the app will be error-free or that access thereto will be continuous or uninterrupted.
+
+    4.  **Limitation of Liability:** In no event shall the developer be liable for any damages (including, without limitation, damages for loss of data or profit, or due to business interruption) arising out of the use or inability to use the materials on this application.
+    
+    By tapping 'Accept', you acknowledge that you have read, understood, and agree to be bound by these Terms and Conditions.
+    """
+}
+
+
 // MARK: - Main Content View
+// UPDATED: Logic is moved here to conditionally show either the Terms or the main app.
 struct ContentView: View {
     @StateObject private var musicPlayer = MusicPlayerManager()
     @StateObject private var libraryManager = MusicLibraryManager()
     @StateObject private var playlistManager = PlaylistManager()
     @StateObject private var viewRouter = ViewRouter()
     @Environment(\.scenePhase) private var scenePhase
+    
+    // This property now controls which view is shown as the root.
+    @AppStorage("hasAcceptedTerms_v1") private var hasAcceptedTerms: Bool = false
 
     var body: some View {
-        TabView(selection: $viewRouter.currentTab) {
-            PlayerView().tabItem {
-                Image(systemName: "circle")
-                Text(musicPlayer.currentSong?.title ?? "Player").lineLimit(1)
-            }.tag(Tab.player)
-            
-            LibraryView().tabItem {
-                Image(systemName: "circle")
-                Text("Library")
-            }.tag(Tab.library)
+        // If terms are accepted, show the main app. Otherwise, show the terms view.
+        if hasAcceptedTerms {
+            // The main TabView of the application.
+            TabView(selection: $viewRouter.currentTab) {
+                PlayerView().tabItem {
+                    Image(systemName: "circle")
+                    Text(musicPlayer.currentSong?.title ?? "Player").lineLimit(1)
+                }.tag(Tab.player)
+                
+                LibraryView().tabItem {
+                    Image(systemName: "circle")
+                    Text("Library")
+                }.tag(Tab.library)
 
-            PlaylistsView().tabItem {
-                Image(systemName: "circle")
-                Text("Playlists")
-            }.tag(Tab.playlists)
-        }
-        .environmentObject(musicPlayer)
-        .environmentObject(libraryManager)
-        .environmentObject(playlistManager)
-        .environmentObject(viewRouter)
-        .onChange(of: scenePhase) { oldPhase, newPhase in
-            musicPlayer.handleScenePhaseChange(newPhase: newPhase)
+                PlaylistsView().tabItem {
+                    Image(systemName: "circle")
+                    Text("Playlists")
+                }.tag(Tab.playlists)
+            }
+            .environmentObject(musicPlayer)
+            .environmentObject(libraryManager)
+            .environmentObject(playlistManager)
+            .environmentObject(viewRouter)
+            .onChange(of: scenePhase) { oldPhase, newPhase in
+                musicPlayer.handleScenePhaseChange(newPhase: newPhase)
+            }
+        } else {
+            // The TermsAndConditionsView is now the root view until terms are accepted.
+            TermsAndConditionsView(hasAcceptedTerms: $hasAcceptedTerms)
         }
     }
 }
@@ -984,13 +1078,11 @@ struct AddMusicView: View {
 }
 
 // MARK: - Download Progress View
-// NEW: This is the dedicated view for showing the download progress bar and text.
 struct DownloadProgressView: View {
     @EnvironmentObject var libraryManager: MusicLibraryManager
 
     var body: some View {
         VStack(spacing: 5) {
-            // Ensure we don't divide by zero and that a download is actually in progress.
             if libraryManager.isDownloading && libraryManager.totalDownloadCount > 0 {
                 let progress = Double(libraryManager.completedDownloadCount) / Double(libraryManager.totalDownloadCount)
                 
@@ -1001,8 +1093,7 @@ struct DownloadProgressView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             } else if libraryManager.isDownloading {
-                // This state is for when downloading has started but we haven't got the total count yet.
-                ProgressView() // Shows an indeterminate spinner
+                ProgressView()
                     .padding(.bottom, 4)
                 Text("Preparing download...")
                     .font(.caption)
@@ -1050,7 +1141,6 @@ struct LibraryView: View {
         } message: {
             Text("This will permanently remove the artist and all of their albums and songs.")
         }
-        // This is the main options menu.
         .confirmationDialog("Library Options", isPresented: $isShowingLibraryOptions, titleVisibility: .hidden) {
             if libraryManager.isDownloading {
                 let progress = libraryManager.totalDownloadCount > 0 ? Double(libraryManager.completedDownloadCount) / Double(libraryManager.totalDownloadCount) : 0.0
@@ -1064,12 +1154,10 @@ struct LibraryView: View {
             
             if !libraryManager.artists.isEmpty {
                 Button("Delete Library", role: .destructive) {
-                    // This now directly triggers the second confirmation dialog.
                     isShowingDeleteConfirmation = true
                 }
             }
         }
-        // The final confirmation for deleting the library.
         .confirmationDialog("Delete Library?", isPresented: $isShowingDeleteConfirmation, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 libraryManager.deleteLibrary()
@@ -1117,17 +1205,12 @@ struct LibraryView: View {
         }
     }
 
-    // UPDATED: This view now includes the logic to show the progress bar.
     private var artistListView: some View {
-        // We use a VStack to place the progress bar above the List.
         VStack(spacing: 0) {
-            // The logic to show the progress view is now simpler.
-            // It relies on the `isDownloading` property, which is set to `false`
-            // immediately upon completion by the new `didSet` observer.
             if libraryManager.isDownloading {
                 DownloadProgressView()
                     .padding(.horizontal)
-                    .padding(.top, 8) // Give it some space from the title
+                    .padding(.top, 8)
             }
             
             List {
@@ -1232,7 +1315,7 @@ struct ArtistDetailView: View {
         .padding(.top, 6).ignoresSafeArea(edges: .top).navigationBarHidden(true).navigationBarBackButtonHidden(true)
         .onAppear {
             if libraryManager.artists.first(where: { $0.id == artistId }) == nil {
-                 presentationMode.wrappedValue.dismiss()
+                presentationMode.wrappedValue.dismiss()
             }
         }
     }
@@ -1379,7 +1462,7 @@ struct PlaylistsView: View {
                                 newPlaylistName = ""; isShowingCreateSheet = false
                             }
                         }
-                        .buttonStyle(.borderedProminent).frame(maxWidth: .infinity).disabled(newPlaylistName.isEmpty).padding()
+                        .buttonStyle(.borderedProminent)
                     }
                     .navigationTitle("New Playlist")
                     .toolbar {
@@ -1778,7 +1861,7 @@ struct PlayerView: View {
             return nil
         }
 
-        let asset = AVURLAsset(url: song.path)
+        let asset = AVURLAsset(url: filePath)
         let metadata = try await asset.load(.metadata)
         let artworkItems = AVMetadataItem.metadataItems(from: metadata, withKey: AVMetadataKey.commonKeyArtwork, keySpace: .common)
         
